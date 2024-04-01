@@ -18,12 +18,22 @@ unidades_generacion = 1:length(costos_generacion)   #Los costos me los dan
 
 # Resolver el modelo
 optimize!(despacho_economico)
+## Holaaaaaaaaaaaaaaaaaaaaaa
+println("siiuu")
+
+
+
+
+
 
 # Obtener resultados
 generacion_optima = value.(gen)
 costo_total = objective_value(despacho_economico)
 
 #Holaaaaaaa
+#holaholaholaholaholaholaholaholaholahola
+
+
 
 
 
