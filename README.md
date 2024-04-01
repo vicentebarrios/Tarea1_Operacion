@@ -4,6 +4,7 @@
 
 # INSTRUCCIONES de uso
 
+- **Para partir editando se debe hacer un `git pull`.**
 - `git add .`: Es para subir todos los archivos que se cambiaron.
 - `git add nombre_Archivo`: Para subir solo el archivo.
 
@@ -13,4 +14,3 @@
 - `git push`.
 
 - Siempre seguir `git add`, después `git commit`, después `git push`.
-- Para partir editando se debe hacer un `git pull`.
