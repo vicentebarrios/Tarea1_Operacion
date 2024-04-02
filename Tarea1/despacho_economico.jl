@@ -1,5 +1,49 @@
 using JuMP
 using Gurobi
+using CSV
+using DataFrames
+
+#Creación estructura generadores
+mutable struct Generadores
+    ID::Int
+    BUS::Int
+    P_MAX_MW::Int
+end
+
+mutable struct Loads
+    ID::Int
+    BUS::Int
+    Loas::Int    
+end    
+
+mutable struct Lines
+    ID::Int
+    BUS_FROM::Int
+    BUS_TO::Int    
+    X_pu::Int
+    P_MAX_MW::Int
+end    
+
+# Leer el archivo CSV y almacenar los datos en un DataFrame
+dataframe_generadores = CSV.read("generadores_example.csv", DataFrame)
+ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
+
+for valor in ID_generadores
+    println("el valor es:" * valor)
+end
+
+# # Se crea un array para almacenar las instancias de Generadores
+generadores = Generadores[]
+
+for fila in eachrow(dataframe_generadores)
+    # Crear una instancia de Generador para cada fila y agregarla al array
+    push!(generadores, Generadores(fila.nombre, fila.potencia, fila.tipo))
+end
+
+println(columna1[0])
+
+
+
 
 #Crear modelo
 despacho_economico = Model(Gurobi.Optimizer)
