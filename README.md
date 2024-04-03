@@ -14,3 +14,4 @@
 - `git push`.
 
 - Siempre seguir `git add`, después `git commit`, después `git push`.
+- Si no podemos hacer un pull, para eliminar los cambios que hemos hecho correr "git reset --hard HEAD", con eso se eliminan los cambios y se puede hacer un pull. 

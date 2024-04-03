@@ -27,7 +27,7 @@ end
 # Leer el archivo CSV y almacenar los datos en un DataFrame
 dataframe_generadores = CSV.read("generadores_example.csv", DataFrame)
 ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
-
+BUS_generadores = dataframe_generadores[:, 2]    # Se extrae la primera columna
 for valor in ID_generadores
     println("el valor es:" * valor)
 end
@@ -37,7 +37,7 @@ generadores = Generadores[]
 
 for fila in eachrow(dataframe_generadores)
     # Crear una instancia de Generador para cada fila y agregarla al array
-    push!(generadores, Generadores(fila.nombre, fila.potencia, fila.tipo))
+    push!(generadores, Generadores(fila.ID, fila.BUS, fila.P_MAX_MW))
 end
 
 println(columna1[0])
