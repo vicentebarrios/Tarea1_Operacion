@@ -28,17 +28,30 @@ end
 dataframe_generadores = CSV.read("generadores_example.csv", DataFrame)
 ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
 BUS_generadores = dataframe_generadores[:, 2]    # Se extrae la primera columna
+P_MAX_MW_generadores = dataframe_generadores[:, 3] 
+
 for valor in ID_generadores
-    println("el valor es:" * valor)
+    println("el valor es:" * string(valor))
 end
+
+
 
 # # Se crea un array para almacenar las instancias de Generadores
 generadores = Generadores[]
 
+println(dataframe_generadores)
+
 for fila in eachrow(dataframe_generadores)
     # Crear una instancia de Generador para cada fila y agregarla al array
-    push!(generadores, Generadores(fila.ID, fila.BUS, fila.P_MAX_MW))
+    push!(generadores, Generadores(fila.ID, fila.Bus, fila.P_MAX_MW))
 end
+
+for generador in generadores
+    println("ID: ", generador.ID, ", BUS: ", generador.BUS, ", P_MAX_MW: ", generador.P_MAX_MW)
+end   
+
+
+
 
 println(columna1[0])
 
