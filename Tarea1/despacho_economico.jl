@@ -5,15 +5,30 @@ using DataFrames
 
 #Creación estructura generadores
 mutable struct Generadores
-    ID::Int
-    BUS::Int
-    P_MAX_MW::Int
+    IdGen::Int
+    PotMin:: Int
+    PotMax::Int
+    GenCost::Int
+    Ramp::Int
+    BarConexion::Int
 end
 
-mutable struct Loads
-    ID::Int
-    BUS::Int
-    Loas::Int    
+mutable struct Lineas
+    IdLin::Int
+    BarIni::Int
+    BarFin::Int
+    PotMaxLine::Int
+    Imp::Int
+end
+
+mutable struct Demanda
+    IdBar::Int
+    Dmd_t1::Int
+    Dmd_t2::Int
+    Dmd_t3::Int
+    Dmd_t4::Int
+    Dmd_t5::Int
+    Dmd_t6::Int  
 end    
 
 mutable struct Lines
@@ -25,14 +40,19 @@ mutable struct Lines
 end    
 
 # Leer el archivo CSV y almacenar los datos en un DataFrame
-dataframe_generadores = CSV.read("generadores_example.csv", DataFrame)
-ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
-BUS_generadores = dataframe_generadores[:, 2]    # Se extrae la primera columna
-P_MAX_MW_generadores = dataframe_generadores[:, 3] 
+dataframe_generadores = CSV.read("Generators.csv", DataFrame)
+dataframe_demanda = CSV.read("Demand.csv", DataFrame)
+dataframe_lineas = CSV.read("Lines.csv", DataFrame)
 
-for valor in ID_generadores
-    println("el valor es:" * string(valor))
-end
+
+
+#ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
+#PotMin_generadores = dataframe_generadores[:, 2]    # Se extrae la segunda columna
+#P_MAX_MW_generadores = dataframe_generadores[:, 3] 
+
+#for valor in ID_generadores
+#    println("el valor es:" * string(valor))
+#end
 
 
 
