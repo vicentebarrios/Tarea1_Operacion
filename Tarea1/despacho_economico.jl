@@ -63,20 +63,49 @@ end
 
 
 
+num_generadores = nrow(dataframe_generadores)
+num_periodos = ncol(dataframe_demanda)-1
+
+for i in 1:num_periodos
+    println("periodo:", i)
+end    
+
 #Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
 
-# Se definen n generadores
-unidades_generacion = 1:length(costos_generacion)   #Los costos me los dan
+@variable(despacho_economico, Q_generacion[1:num_generadores, 1:num_periodos] >= 0)  # Cantidad que cada generador genera en cada período
 
-# Variables de decisión
-@variable(despacho_economico, 0 <= gen[unidades_generacion] <= capacidades_generacion)
+
+for column in eachcol(Q_generacion)
+    println("primer elemento columna:", column[1])
+end    
+
+for fil in eachrow(Q_generacion)
+    println("primer elemento fila :", fil[1])
+end   
+
+println("El valor es:", Q_generacion[1,1])
+
+
 
 # La función objetivo es minimizar los costos de generación
-@objective(despacho_economico, Min, sum(costos_generacion[i] * gen[i] for i in unidades_generacion))
+@objective(despacho_economico, Min, sum(generador.GenCost * Q_generacion[generador.IdGen,tiempo] for generador in generadores for tiempo in 1:num_periodos))
 
-# Restricción de satisfacción de demanda
+for generador in generadores
+    println("ID es:", generador.IdGen)
+end
+
+# Restricción de satisfacción de demanda    --- Falta Actualizar
 @constraint(despacho_economico, sum(gen[i] for i in unidades_generacion) >= demanda)
+
+
+# Restricción de límite de generación.
+for gen in generadores
+    for tiempo in 1:num_periodos
+        @constraint(despacho_economico, gen.PotMax >= Q_generacion[gen.IdGen, tiempo] >= gen.PotMin)
+    end    
+end    
+# El gen no va de 1,2,3 sino que va como un tipo del dato.
 
 # Resolver el modelo
 optimize!(despacho_economico)
