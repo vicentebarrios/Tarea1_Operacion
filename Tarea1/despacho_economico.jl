@@ -31,13 +31,6 @@ mutable struct Demanda
     Dmd_t6::Int  
 end    
 
-mutable struct Lines
-    ID::Int
-    BUS_FROM::Int
-    BUS_TO::Int    
-    X_pu::Int
-    P_MAX_MW::Int
-end    
 
 # Leer el archivo CSV y almacenar los datos en un DataFrame
 dataframe_generadores = CSV.read("Generators.csv", DataFrame)
@@ -58,27 +51,19 @@ dataframe_lineas = CSV.read("Lines.csv", DataFrame)
 
 # # Se crea un array para almacenar las instancias de Generadores
 generadores = Generadores[]
-
-println(dataframe_generadores)
-
 for fila in eachrow(dataframe_generadores)
     # Crear una instancia de Generador para cada fila y agregarla al array
-    push!(generadores, Generadores(fila.ID, fila.Bus, fila.P_MAX_MW))
+    push!(generadores, Generadores(fila.IdGen, fila.PotMin, fila.PotMax, fila.GenCost, fila.Ramp, fila.BarConexion))
 end
 
 for generador in generadores
-    println("ID: ", generador.ID, ", BUS: ", generador.BUS, ", P_MAX_MW: ", generador.P_MAX_MW)
+    println("ID: ", generador.IdGen, ", Pot Min: ", generador.PotMin, ", Pot Max: ", generador.PotMax, ", Costo Generacion: ",generador.GenCost)
 end   
 
 
 
 
-println(columna1[0])
-
-
-
-
-#Crear modelo
+#Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
 
 # Se definen n generadores
