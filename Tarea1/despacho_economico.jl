@@ -13,12 +13,12 @@ mutable struct Generadores
     BarConexion::Int
 end
 
-mutable struct Lineas
+mutable struct Lineass
     IdLin::Int
     BarIni::Int
     BarFin::Int
     PotMaxLine::Int
-    Imp::Int
+    Imp::Float64
 end
 
 mutable struct Demanda
@@ -37,16 +37,12 @@ dataframe_generadores = CSV.read("Generators.csv", DataFrame)
 dataframe_demanda = CSV.read("Demand.csv", DataFrame)
 dataframe_lineas = CSV.read("Lines.csv", DataFrame)
 
-
+# Convertir la última columna (Imp) a Float64
+println(typeof(dataframe_lineas.Imp))
+dataframe_lineas.Imp = parse.(Float64, coalesce.(dataframe_lineas.Imp, "NaN"))
 
 #ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
 #PotMin_generadores = dataframe_generadores[:, 2]    # Se extrae la segunda columna
-#P_MAX_MW_generadores = dataframe_generadores[:, 3] 
-
-#for valor in ID_generadores
-#    println("el valor es:" * string(valor))
-#end
-
 
 
 # # Se crea un array para almacenar las instancias de Generadores
@@ -61,10 +57,25 @@ for generador in generadores
 end   
 
 
+barra_demandas = Demanda[]
+for fila in eachrow(dataframe_demanda)
+    # Crear una instancia de Demanda para cada fila y agregarla al array
+    push!(barra_demandas, Demanda(fila.IdBar, fila.Dmd_t1, fila.Dmd_t2, fila.Dmd_t3, fila.Dmd_t4, fila.Dmd_t5, fila.Dmd_t6))
+end
+
+lineass = Lineass[]
+df.Float64 = parse.(Float64, df.String7)
+for fila in eachrow(dataframe_lineas)
+    println("El tipo de caracter es:", typeof(fila[4]))
+    # Crear una instancia de Demanda para cada fila y agregarla al array
+    #push!(lineas, Lineass(fila.IdLin, fila.BarIni, fila.BarFin, fila.PotMax, fila.Imp))
+end
+
 
 
 num_generadores = nrow(dataframe_generadores)
 num_periodos = ncol(dataframe_demanda)-1
+num_barras = nrow(dataframe_demanda)
 
 for i in 1:num_periodos
     println("periodo:", i)
@@ -95,17 +106,40 @@ for generador in generadores
     println("ID es:", generador.IdGen)
 end
 
-# Restricción de satisfacción de demanda    --- Falta Actualizar
-@constraint(despacho_economico, sum(gen[i] for i in unidades_generacion) >= demanda)
-
+# Restricción #
+#La suma de lo que se genera tiene que ser mayor o igual a la suma de lo que se demanda, en cada periodo
+for tiempo in 1:num_periodos
+    if tiempo == 1
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t1 for demanda in barra_demandas))
+    elseif tiempo == 2
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t2 for demanda in barra_demandas))
+    elseif tiempo == 3
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t3 for demanda in barra_demandas))
+    elseif tiempo == 4
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t4 for demanda in barra_demandas))
+    elseif tiempo == 5
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t5 for demanda in barra_demandas))
+    else
+        @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t6 for demanda in barra_demandas))  
+    end     
+end    
 
 # Restricción de límite de generación.
 for gen in generadores
     for tiempo in 1:num_periodos
-        @constraint(despacho_economico, gen.PotMax >= Q_generacion[gen.IdGen, tiempo] >= gen.PotMin)
+        @constraint(despacho_economico, gen.PotMin <= Q_generacion[gen.IdGen, tiempo] <= gen.PotMax)
     end    
 end    
-# El gen no va de 1,2,3 sino que va como un tipo del dato.
+
+#Restricción de rampas de generación
+for gen in generadores
+    for tiempo in 2:num_periodos
+        @constraint(despacho_economico, Q_generacion[gen.IdGen, tiempo] - Q_generacion[gen.IdGen, tiempo-1] <= gen.Ramp)
+    end    
+end 
+
+#Restricción de límite de potencia por línea de transmisión
+
 
 # Resolver el modelo
 optimize!(despacho_economico)
