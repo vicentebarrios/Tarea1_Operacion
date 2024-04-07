@@ -128,10 +128,11 @@ for gen in generadores
     end    
 end 
 
-#Restricción de límite de potencia por línea de transmisión
+#Restricción de demanda para cada barra y cada periodo
 for linea in lineas
     for tiempo in 1:num_periodos
         if tiempo == 1
+            # Cálculo de la suma de la generación de los generadores conectados a la barra inicial de la línea en el tiempo t menos el flujo hacia otras barras, debe ser igual a la demanda. 
             @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t1)
         elseif tiempo == 2
             @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t2)
@@ -149,16 +150,16 @@ end
 
 # Restricción de límite de flujo por linea
 for linea in lineas
-    
+    for tiempo in 1:num_periodos
+        @constraint(despacho_economico, (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp <= linea.PotMaxLine)
+    end 
 end    
 
 
 # Resolver el modelo
 optimize!(despacho_economico)
 ## Holaaaaaaaaaaaaaaaaaaaaaa
-println("siiuu")
 
-println("nouuu")
 
 
 
