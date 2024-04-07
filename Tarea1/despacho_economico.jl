@@ -63,38 +63,22 @@ end
 num_generadores = nrow(dataframe_generadores)
 num_periodos = ncol(dataframe_demanda)-1
 num_barras = nrow(dataframe_demanda)
-
-for i in 1:num_periodos
-    println("periodo:", i)
-end    
+ 
 
 #Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
 #Crear variable potencia de generador en período t
 @variable(despacho_economico, Q_generacion[1:num_generadores, 1:num_periodos] >= 0)  # Cantidad que cada generador genera en cada período
 
+#@variable(despacho_economico, flujo[1:num_barras, 1:num_periodos] >= 0) 
 #Crear variable ángulo de cada barra
-@variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos])  
-
-
-for column in eachcol(Q_generacion)
-    println("primer elemento columna:", column[1])
-end    
-
-for fil in eachrow(Q_generacion)
-    println("primer elemento fila :", fil[1])
-end   
-
-println("El valor es:", Q_generacion[1,1])
+@variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos] >= 0)  
 
 
 
 # La función objetivo es minimizar los costos de generación
 @objective(despacho_economico, Min, sum(generador.GenCost * Q_generacion[generador.IdGen,tiempo] for generador in generadores for tiempo in 1:num_periodos))
 
-for generador in generadores
-    println("ID es:", generador.IdGen)
-end
 
 # Restricción #
 #La suma de lo que se genera tiene que ser mayor o igual a la suma de lo que se demanda, en cada periodo
@@ -113,6 +97,7 @@ for tiempo in 1:num_periodos
         @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t6 for demanda in barra_demandas))  
     end     
 end    
+
 
 # Restricción de límite de generación.
 for gen in generadores
@@ -148,6 +133,22 @@ for linea in lineas
     end
 end 
 
+
+#Falta completar
+for barra in barra_demandas
+    for t in 1:num_periodos
+        generación_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar) 
+        for l in lineas
+            flujos_barras = sum((angulo_barra[barra.IdBar,t]- angulo_barra[next.IdBar,t])/l.Imp for next in barra_demandas if next.IdBar==l.BarFin) 
+        @constraint(despacho_economico, - sum((angulo_barra[barra.IdBar, tiempo]-angulo_barra[barra_vecina.BarFin, tiempo])/linea.Imp for barra_vecina in lineas if barra.IdBar== 1 ))
+        #@constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion==barra.IdBar) - sum((angulo_barra[barra.IdBar, tiempo]-angulo_barra[barra_vecina.BarFin, tiempo])/linea.Imp for barra_vecina in lineas if barra  ))
+        end
+    end    
+end    
+
+
+
+
 # Restricción de límite de flujo por linea
 for linea in lineas
     for tiempo in 1:num_periodos
@@ -158,11 +159,17 @@ end
 
 # Resolver el modelo
 optimize!(despacho_economico)
-## Holaaaaaaaaaaaaaaaaaaaaaa
 
-
-
+# Verificar si el modelo es óptimo o factible
+status = termination_status(despacho_economico)
+if status == MOI.OPTIMAL || status == MOI.FEASIBLE_POINT
+    # Obtener el valor objetivo
+    costo_total = objective_value(despacho_economico)
+    println("El costo total es: ", costo_total)
+else
+    println("El modelo no es óptimo o factible.")
+end
 
 # Obtener resultados
-generacion_optima = value.(gen)
+#generacion_optima = value.(gen)
 costo_total = objective_value(despacho_economico)
