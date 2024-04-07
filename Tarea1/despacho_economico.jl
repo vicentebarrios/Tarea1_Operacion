@@ -37,10 +37,6 @@ dataframe_generadores = CSV.read("Generators.csv", DataFrame)
 dataframe_demanda = CSV.read("Demand.csv", DataFrame)
 dataframe_lineas = CSV.read("Lines.csv", DataFrame)
 
-# Convertir la última columna (Imp) a Float64
-println(typeof(dataframe_lineas.Imp))
-dataframe_lineas.Imp = parse.(Float64, coalesce.(dataframe_lineas.Imp, "NaN"))
-
 #ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
 #PotMin_generadores = dataframe_generadores[:, 2]    # Se extrae la segunda columna
 
@@ -52,26 +48,17 @@ for fila in eachrow(dataframe_generadores)
     push!(generadores, Generadores(fila.IdGen, fila.PotMin, fila.PotMax, fila.GenCost, fila.Ramp, fila.BarConexion))
 end
 
-for generador in generadores
-    println("ID: ", generador.IdGen, ", Pot Min: ", generador.PotMin, ", Pot Max: ", generador.PotMax, ", Costo Generacion: ",generador.GenCost)
-end   
-
-
 barra_demandas = Demanda[]
 for fila in eachrow(dataframe_demanda)
     # Crear una instancia de Demanda para cada fila y agregarla al array
     push!(barra_demandas, Demanda(fila.IdBar, fila.Dmd_t1, fila.Dmd_t2, fila.Dmd_t3, fila.Dmd_t4, fila.Dmd_t5, fila.Dmd_t6))
 end
 
-lineass = Lineass[]
-df.Float64 = parse.(Float64, df.String7)
+lineas = Lineass[]
 for fila in eachrow(dataframe_lineas)
-    println("El tipo de caracter es:", typeof(fila[4]))
     # Crear una instancia de Demanda para cada fila y agregarla al array
-    #push!(lineas, Lineass(fila.IdLin, fila.BarIni, fila.BarFin, fila.PotMax, fila.Imp))
+    push!(lineas, Lineass(fila.IdLin, fila.BarIni, fila.BarFin, fila.PotMax, fila.Imp))
 end
-
-
 
 num_generadores = nrow(dataframe_generadores)
 num_periodos = ncol(dataframe_demanda)-1
@@ -83,8 +70,11 @@ end
 
 #Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
-
+#Crear variable potencia de generador en período t
 @variable(despacho_economico, Q_generacion[1:num_generadores, 1:num_periodos] >= 0)  # Cantidad que cada generador genera en cada período
+
+#Crear variable ángulo de cada barra
+@variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos])  
 
 
 for column in eachcol(Q_generacion)
@@ -139,6 +129,28 @@ for gen in generadores
 end 
 
 #Restricción de límite de potencia por línea de transmisión
+for linea in lineas
+    for tiempo in 1:num_periodos
+        if tiempo == 1
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t1)
+        elseif tiempo == 2
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t2)
+        elseif tiempo == 3
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t3)
+        elseif tiempo == 4  
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t4) 
+        elseif tiempo == 5  
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t5) 
+        else
+            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t6)        
+        end   
+    end
+end 
+
+# Restricción de límite de flujo por linea
+for linea in lineas
+    
+end    
 
 
 # Resolver el modelo
