@@ -63,7 +63,7 @@ end
 num_generadores = nrow(dataframe_generadores)
 num_periodos = ncol(dataframe_demanda)-1
 num_barras = nrow(dataframe_demanda)
- 
+num_lineas = nrow(dataframe_lineas)
 
 #Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
@@ -75,6 +75,9 @@ despacho_economico = Model(Gurobi.Optimizer)
 @variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos] >= 0)  
 
 
+#Crear variable flujo linea
+@variable(despacho_economico, flujo[1:num_lineas, 1:num_periodos]) 
+  
 
 # La función objetivo es minimizar los costos de generación
 @objective(despacho_economico, Min, sum(generador.GenCost * Q_generacion[generador.IdGen,tiempo] for generador in generadores for tiempo in 1:num_periodos))
@@ -114,6 +117,7 @@ for gen in generadores
 end 
 
 #Restricción de demanda para cada barra y cada periodo
+#=
 for linea in lineas
     for tiempo in 1:num_periodos
         if tiempo == 1
@@ -133,18 +137,46 @@ for linea in lineas
     end
 end 
 
+=#
+
+#Restricción de relación de variables
+for linea in lineas
+    for t in 1:num_periodos
+        @constraint(despacho_economico, flujo[linea.IdLin, t] == (angulo_barra[linea.BarIni,t] - angulo_barra[linea.BarFin,t])/linea.Imp)
+    end    
+end   
+
+
 
 #Falta completar
 for barra in barra_demandas
     for t in 1:num_periodos
-        generación_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar) 
-        for l in lineas
-            flujos_barras = sum((angulo_barra[barra.IdBar,t]- angulo_barra[next.IdBar,t])/l.Imp for next in barra_demandas if next.IdBar==l.BarFin) 
-        @constraint(despacho_economico, - sum((angulo_barra[barra.IdBar, tiempo]-angulo_barra[barra_vecina.BarFin, tiempo])/linea.Imp for barra_vecina in lineas if barra.IdBar== 1 ))
-        #@constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion==barra.IdBar) - sum((angulo_barra[barra.IdBar, tiempo]-angulo_barra[barra_vecina.BarFin, tiempo])/linea.Imp for barra_vecina in lineas if barra  ))
-        end
+        generacion_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar) 
+        flujos_barras = sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarIni==barra.IdBar)
+        if t==1
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t1)
+        elseif t==2
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t2)
+        elseif t==3
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t3)
+        elseif t==4
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t4)
+        elseif t==5
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t5)
+        else
+            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t6) 
+        end               
     end    
 end    
+
+for barra in barra_demandas
+    for t in 1:num_periodos
+        println("Iterando para el período: ", t)
+        generacion_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar)
+        println("generacion_barra =", generacion_barra)
+    end
+end
+
 
 
 
