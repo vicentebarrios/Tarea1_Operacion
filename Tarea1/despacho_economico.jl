@@ -72,7 +72,7 @@ despacho_economico = Model(Gurobi.Optimizer)
 
 #@variable(despacho_economico, flujo[1:num_barras, 1:num_periodos] >= 0) 
 #Crear variable ángulo de cada barra
-@variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos] >= 0)  
+@variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos])  
 
 
 #Crear variable flujo linea
@@ -81,6 +81,22 @@ despacho_economico = Model(Gurobi.Optimizer)
 
 # La función objetivo es minimizar los costos de generación
 @objective(despacho_economico, Min, sum(generador.GenCost * Q_generacion[generador.IdGen,tiempo] for generador in generadores for tiempo in 1:num_periodos))
+
+
+
+# Restricción de límite de generación.
+for gen in generadores
+    for tiempo in 1:num_periodos
+        @constraint(despacho_economico, gen.PotMin <= Q_generacion[gen.IdGen, tiempo] <= gen.PotMax)
+    end    
+end    
+
+#Restricción de rampas de generación
+for gen in generadores
+    for tiempo in 2:num_periodos
+        @constraint(despacho_economico, -gen.Ramp <= Q_generacion[gen.IdGen, tiempo] - Q_generacion[gen.IdGen, tiempo-1] <= gen.Ramp)
+    end    
+end 
 
 
 # Restricción #
@@ -102,19 +118,7 @@ for tiempo in 1:num_periodos
 end    
 
 
-# Restricción de límite de generación.
-for gen in generadores
-    for tiempo in 1:num_periodos
-        @constraint(despacho_economico, gen.PotMin <= Q_generacion[gen.IdGen, tiempo] <= gen.PotMax)
-    end    
-end    
 
-#Restricción de rampas de generación
-for gen in generadores
-    for tiempo in 2:num_periodos
-        @constraint(despacho_economico, Q_generacion[gen.IdGen, tiempo] - Q_generacion[gen.IdGen, tiempo-1] <= gen.Ramp)
-    end    
-end 
 
 #Restricción de demanda para cada barra y cada periodo
 #=
@@ -147,12 +151,11 @@ for linea in lineas
 end   
 
 
-
-#Falta completar
+# La restricción arroja vacío # Falta corroborar
 for barra in barra_demandas
     for t in 1:num_periodos
         generacion_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar) 
-        flujos_barras = sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarIni==barra.IdBar)
+        flujos_barras = sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarIni==barra.IdBar) - sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarFin==barra.IdBar)
         if t==1
             @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t1)
         elseif t==2
@@ -184,7 +187,7 @@ end
 # Restricción de límite de flujo por linea
 for linea in lineas
     for tiempo in 1:num_periodos
-        @constraint(despacho_economico, (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp <= linea.PotMaxLine)
+        @constraint(despacho_economico, (flujo[linea.IdLin, tiempo] <= linea.PotMaxLine))
     end 
 end    
 
