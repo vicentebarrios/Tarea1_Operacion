@@ -103,7 +103,6 @@ end
 for tiempo in 1:num_periodos
     if tiempo == 1
         @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t1 for demanda in barra_demandas))
-        println("Demandas del periodo 1: ", [demanda.Dmd_t1 for demanda in barra_demandas])
     elseif tiempo == 2
         @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t2 for demanda in barra_demandas))
     elseif tiempo == 3
@@ -185,10 +184,10 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
     println("La potencia del generador 3 en t=2 es ",value.(Q_generacion[3,2]))
     println("La potencia del generador 3 en t=3 es ",value.(Q_generacion[3,3]))
     println("La potencia del generador 3 en t=4 es ",value.(Q_generacion[3,4]))
-    println("La potencia del generador 3 en t=5 es ",alue.(Q_generacion[3,5]))
+    println("La potencia del generador 3 en t=5 es ",value.(Q_generacion[3,5]))
     println("La potencia del generador 3 en t=6 es ",value.(Q_generacion[3,6]))
 
-
+    println("-----------------------------------")
     println("Flujo desde barra 1 a 2, t=1, :", value.(flujo[1,1]))
     println("Flujo desde barra 1 a 2, t=2, :", value.(flujo[1,2]))
     println("Flujo desde barra 1 a 2, t=3, :", value.(flujo[1,3]))
