@@ -37,9 +37,6 @@ dataframe_generadores = CSV.read("Generators.csv", DataFrame)
 dataframe_demanda = CSV.read("Demand.csv", DataFrame)
 dataframe_lineas = CSV.read("Lines.csv", DataFrame)
 
-#ID_generadores = dataframe_generadores[:, 1]    # Se extrae la primera columna
-#PotMin_generadores = dataframe_generadores[:, 2]    # Se extrae la segunda columna
-
 
 # # Se crea un array para almacenar las instancias de Generadores
 generadores = Generadores[]
@@ -67,13 +64,16 @@ num_lineas = nrow(dataframe_lineas)
 
 #Crear modelo despacho económico
 despacho_economico = Model(Gurobi.Optimizer)
+
+# Habilitar el registro de mensajes de Gurobi para ver el progreso
+set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la salida de mensajes
+
+
 #Crear variable potencia de generador en período t
 @variable(despacho_economico, Q_generacion[1:num_generadores, 1:num_periodos] >= 0)  # Cantidad que cada generador genera en cada período
 
-#@variable(despacho_economico, flujo[1:num_barras, 1:num_periodos] >= 0) 
 #Crear variable ángulo de cada barra
 @variable(despacho_economico, angulo_barra[1:num_barras, 1:num_periodos])  
-
 
 #Crear variable flujo linea
 @variable(despacho_economico, flujo[1:num_lineas, 1:num_periodos]) 
@@ -81,7 +81,6 @@ despacho_economico = Model(Gurobi.Optimizer)
 
 # La función objetivo es minimizar los costos de generación
 @objective(despacho_economico, Min, sum(generador.GenCost * Q_generacion[generador.IdGen,tiempo] for generador in generadores for tiempo in 1:num_periodos))
-
 
 
 # Restricción de límite de generación.
@@ -104,6 +103,7 @@ end
 for tiempo in 1:num_periodos
     if tiempo == 1
         @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t1 for demanda in barra_demandas))
+        println("Demandas del periodo 1: ", [demanda.Dmd_t1 for demanda in barra_demandas])
     elseif tiempo == 2
         @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores) >= sum(demanda.Dmd_t2 for demanda in barra_demandas))
     elseif tiempo == 3
@@ -118,31 +118,6 @@ for tiempo in 1:num_periodos
 end    
 
 
-
-
-#Restricción de demanda para cada barra y cada periodo
-#=
-for linea in lineas
-    for tiempo in 1:num_periodos
-        if tiempo == 1
-            # Cálculo de la suma de la generación de los generadores conectados a la barra inicial de la línea en el tiempo t menos el flujo hacia otras barras, debe ser igual a la demanda. 
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t1)
-        elseif tiempo == 2
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t2)
-        elseif tiempo == 3
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t3)
-        elseif tiempo == 4  
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t4) 
-        elseif tiempo == 5  
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t5) 
-        else
-            @constraint(despacho_economico, sum(Q_generacion[gen.IdGen, tiempo] for gen in generadores if gen.BarConexion == linea.BarIni) - (angulo_barra[linea.BarIni, tiempo]-angulo_barra[linea.BarFin, tiempo])/linea.Imp == barra_demandas[linea.BarIni].Dmd_t6)        
-        end   
-    end
-end 
-
-=#
-
 #Restricción de relación de variables
 for linea in lineas
     for t in 1:num_periodos
@@ -150,39 +125,27 @@ for linea in lineas
     end    
 end   
 
-
 # La restricción arroja vacío # Falta corroborar
 for barra in barra_demandas
     for t in 1:num_periodos
-        generacion_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar) 
-        flujos_barras = sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarIni==barra.IdBar) - sum(flujo[lin.IdLin,t] for lin in lineas if lin.BarFin==barra.IdBar)
+        generacion_barra = generacion_barra = isempty([gen for gen in generadores if gen.BarConexion == barra.IdBar]) ? 0 : sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion == barra.IdBar)      
+        flujo_saliente = isempty([lin for lin in lineas if lin.BarIni == barra.IdBar]) ? 0 : sum(flujo[lin.IdLin, t] for lin in lineas if lin.BarIni == barra.IdBar)
+        flujo_entrante = isempty([lin for lin in lineas if lin.BarFin == barra.IdBar]) ? 0 : sum(flujo[lin.IdLin, t] for lin in lineas if lin.BarFin == barra.IdBar)
         if t==1
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t1)
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t1)
         elseif t==2
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t2)
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t2)
         elseif t==3
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t3)
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t3)
         elseif t==4
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t4)
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t4)
         elseif t==5
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t5)
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t5)
         else
-            @constraint(despacho_economico, generacion_barra - flujos_barras == barra.Dmd_t6) 
+            @constraint(despacho_economico, generacion_barra - flujo_saliente + flujo_entrante == barra.Dmd_t6)
         end               
     end    
 end    
-
-for barra in barra_demandas
-    for t in 1:num_periodos
-        println("Iterando para el período: ", t)
-        generacion_barra = sum(Q_generacion[gen.IdGen, t] for gen in generadores if gen.BarConexion==barra.IdBar)
-        println("generacion_barra =", generacion_barra)
-    end
-end
-
-
-
-
 
 # Restricción de límite de flujo por linea
 for linea in lineas
@@ -195,16 +158,46 @@ end
 # Resolver el modelo
 optimize!(despacho_economico)
 
-# Verificar si el modelo es óptimo o factible
-status = termination_status(despacho_economico)
-if status == MOI.OPTIMAL || status == MOI.FEASIBLE_POINT
-    # Obtener el valor objetivo
-    costo_total = objective_value(despacho_economico)
-    println("El costo total es: ", costo_total)
+# Obtener resultados
+# Verificar si la optimización fue exitosa
+if termination_status(despacho_economico) == MOI.OPTIMAL
+    # Obtener los valores de las variables
+    valores_Q_generacion = value.(Q_generacion)
+    valores_angulo_barra = value.(angulo_barra)
+    valores_flujo = value.(flujo)
+    
+    # Imprimir los valores de las variables
+    println("Valores de Q_generacion para el primer generador:")
+    println(value.(Q_generacion[1,1]))
+    println(value.(Q_generacion[1,2]))
+    println(value.(Q_generacion[1,3]))
+    println(value.(Q_generacion[1,4]))
+    println(value.(Q_generacion[1,5]))
+    println(value.(Q_generacion[1,6]))
+
+    println("Valores de Q_generacion para el segundo generador:")
+    println(value.(Q_generacion[2,1]))
+    println(value.(Q_generacion[2,2]))
+    println(value.(Q_generacion[2,3]))
+    println(value.(Q_generacion[2,4]))
+    println(value.(Q_generacion[2,5]))
+    println(value.(Q_generacion[2,6]))
+    println("Valores de Q_generacion para el tercer generador:")
+    println(value.(Q_generacion[3,1]))
+    println(value.(Q_generacion[3,2]))
+    println(value.(Q_generacion[3,3]))
+    println(value.(Q_generacion[3,4]))
+    println(value.(Q_generacion[3,5]))
+    println(value.(Q_generacion[3,6]))
+
+    #println("Valores de angulo_barra:")
+    #println(valores_angulo_barra)
+    
+    #println("Valores de flujo:")
+    #println(valores_flujo)
 else
-    println("El modelo no es óptimo o factible.")
+    println("El modelo no pudo ser resuelto de manera óptima.")
 end
 
-# Obtener resultados
 #generacion_optima = value.(gen)
 costo_total = objective_value(despacho_economico)
