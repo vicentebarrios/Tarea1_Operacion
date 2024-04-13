@@ -172,14 +172,14 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
     println("La potencia del generador 1 en t=4 es ",value.(Q_generacion[1,4]))
     println("La potencia del generador 1 en t=5 es ",value.(Q_generacion[1,5]))
     println("La potencia del generador 1 en t=6 es ",value.(Q_generacion[1,6]))
-
+    println("-----------------------------------")
     println("La potencia del generador 2 en t=1 es ",value.(Q_generacion[2,1]))
     println("La potencia del generador 2 en t=2 es ",value.(Q_generacion[2,2]))
     println("La potencia del generador 2 en t=3 es ",value.(Q_generacion[2,3]))
     println("La potencia del generador 2 en t=4 es ",value.(Q_generacion[2,4]))
     println("La potencia del generador 2 en t=5 es ",value.(Q_generacion[2,5]))
     println("La potencia del generador 2 en t=6 es ",value.(Q_generacion[2,6]))
- 
+    println("-----------------------------------")
     println("La potencia del generador 3 en t=1 es ",value.(Q_generacion[3,1]))
     println("La potencia del generador 3 en t=2 es ",value.(Q_generacion[3,2]))
     println("La potencia del generador 3 en t=3 es ",value.(Q_generacion[3,3]))
