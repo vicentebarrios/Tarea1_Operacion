@@ -82,7 +82,7 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 @variable(despacho_economico, pi >= angulo_barra[b in barras, t in Time_blocks] >= -pi)
 @variable(despacho_economico, flujo[linea in lineas, t in Time_blocks]) 
 @variable(despacho_economico, energía_bat[bateria in baterias, t in Time_blocks]) 
-@variable(despacho_economico, potencia_bat[bateria in baterias, t in Time_blocks]) 
+@variable(despacho_economico, potencia_bat[bateria in baterias, t in Time_blocks] >= 0) 
 
 
 
@@ -93,13 +93,13 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 
 # Restricción de límite de generación.
 @constraint(despacho_economico, constraint_Limites_gen[generador in generadores, tiempo in Time_blocks], generador.PotMin <= P_generador[generador, tiempo] <= generador.PotMax)
-#Definición flujo
+# Restricción de Definición flujo
 @constraint(despacho_economico, constraint_flujo_linea[linea in lineas, tiempo in Time_blocks], flujo[linea, tiempo] == Potencia_base * (angulo_barra[first(a for a in barras if a.IdBar == linea.BarIni), tiempo] - angulo_barra[first(a for a in barras if a.IdBar == linea.BarFin), tiempo])/(linea.Reactancia))
-#Límite de flujo por línea
+# Restricción de Límite de flujo por línea
 @constraint(despacho_economico, constraint_limite_flujo[linea in lineas, tiempo in Time_blocks], - linea.PotMaxLine <= flujo[linea, tiempo] <= linea.PotMaxLine)
-#Balance de potencia
-@constraint(despacho_economico, constraint_Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.BarConexion == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.BarIni == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.BarFin == barra.IdBar) == barra.Demanda[tiempo])
-# Restricción para fijar en cero el ángulo de la primera barra
+# Restricción de Balance de potencia
+@constraint(despacho_economico, constraint_Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.BarConexion == barra.IdBar) + sum(sqrt(bateria.Rend)*potencia_bat[bateria, tiempo] for bateria in baterias if bateria.BarConexion == barra.IdBar)- sum((flujo[linea, tiempo]) for linea in lineas if linea.BarIni == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.BarFin == barra.IdBar) == barra.Demanda[tiempo])
+# Restricción barra slack, para fijar en cero el ángulo de la primera barra
 @constraint(despacho_economico, constraint_barra_slack[tiempo in Time_blocks], angulo_barra[barras[1], tiempo] .== 0)
 # Restricción flujo batería.
 @constraint(despacho_economico, constraint_flujo_bateria[bateria in baterias, tiempo in Time_blocks], energia_bat[bateria, tiempo] == energia_bat[bateria, tiempo-1] - potencia_bat[bateria, tiempo]*sqrt(bateria.Rend) )
@@ -109,7 +109,8 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 @constraint(despacho_economico, constraint_condicion_final_bat[bateria in baterias], energia_bat[bateria, length(Time_blocks)] == bateria.Cap/2 )
 # Restricción capacidad de energía baterias
 @constraint(despacho_economico, constraint_cap_energia_bat[bateria in baterias, tiempo in Time_blocks], energia_bat[bateria, tiempo] <= bateria.Cap*3 )
-
+# Restricción de potencia de la batería
+@constraint(despacho_economico, constraint_cap_potencia_bat[bateria in baterias, tiempo in Time_blocks], potencia_bat[bateria,tiempo] <= bateria.Cap)
 
 # Resolver el modelo
 optimize!(despacho_economico)
