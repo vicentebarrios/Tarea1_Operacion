@@ -67,7 +67,7 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 
 #Creación de variables
 @variable(despacho_economico, P_generador[g in generadores, t in Time_blocks] >= 0)
-@variable(despacho_economico, 2*pi >= angulo_barra[b in barras, t in Time_blocks] >= 0)
+@variable(despacho_economico, pi >= angulo_barra[b in barras, t in Time_blocks] >= -pi)
 @variable(despacho_economico, flujo[linea in lineas, t in Time_blocks]) 
 
 
@@ -89,7 +89,8 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 #Balance de potencia
 @constraint(despacho_economico, constraint_Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.BarConexion == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.BarIni == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.BarFin == barra.IdBar) == barra.Demanda[tiempo])
 # Restricción para fijar en cero el ángulo de la primera barra
-#@constraint(despacho_economico, constraint_barra_slack[tiempo in Time_blocks], angulo_barra[barras[1].IdBar,tiempo] == 0)
+@constraint(despacho_economico, constraint_barra_slack[tiempo in Time_blocks], angulo_barra[barras[1], tiempo] .== 0)
+
 
 # Resolver el modelo
 optimize!(despacho_economico)
