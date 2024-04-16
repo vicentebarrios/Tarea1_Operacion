@@ -56,7 +56,7 @@ end
 
 baterias = Baterias[]
 for fila in eachrow(dataframe_baterias)
-    push!(lineas, baterias(fila.IdBESS, fila.Cap, fila.Rend, fila.BarConexion))
+    push!(lineas, Baterias(fila.IdBESS, fila.Cap, fila.Rend, fila.BarConexion))
 end
 
 
