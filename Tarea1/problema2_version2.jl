@@ -81,7 +81,7 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 # Restricción de límite de generación.
 @constraint(despacho_economico, constraint_Limites_gen[generador in generadores, tiempo in Time_blocks], generador.PotMin <= P_generador[generador, tiempo] <= generador.PotMax)
 # Restricción de rampas de generación
-# @constraint(despacho_economico, constraint_Rampa_gen[generador in generadores, tiempo in Time_blocks[2:end]], -generador.Ramp <= P_generador[generador, tiempo] - P_generador[generador, tiempo - 1] <= generador.Ramp)
+ @constraint(despacho_economico, constraint_Rampa_gen[generador in generadores, tiempo in Time_blocks[2:end]], -generador.Ramp <= P_generador[generador, tiempo] - P_generador[generador, tiempo - 1] <= generador.Ramp)
 # Restriccion de relación de variables (demanda no satisfecha)
 @constraint(despacho_economico, constraint_Demanda_No_Satis[barra in barras,tiempo in Time_blocks], dmda_NoSatis[barra,tiempo] == barra.Demanda[tiempo]-(sum(P_generador[generador, tiempo] for generador in generadores if generador.BarConexion == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.BarIni == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.BarFin == barra.IdBar)))
 # Definición flujo
@@ -115,6 +115,8 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
         println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
         global demanda_no_cumplida +=  value.(dmda_NoSatis[barra, tiempo])
         println("Demanda no satisfecha ", value.(dmda_NoSatis[barra, tiempo]))
+        costo_marginal_barra = dual(constraint_Demanda_No_Satis[barra, tiempo])
+        println("Costo marginal de la barra ", barra.IdBar, " en el tiempo ", tiempo, " es: ", costo_marginal_barra)
         end
     end
     costo_total = objective_value(despacho_economico)
