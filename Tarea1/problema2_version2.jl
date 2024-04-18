@@ -120,8 +120,10 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
         end
     end
     costo_total = objective_value(despacho_economico)
+    println("--------------------------------------------")
     println("El costo total del sistema es: ", costo_total)
     println("La demanda no satisfecha total es: ", demanda_no_cumplida)
+    println("El costo de la multa es: ", demanda_no_cumplida*30)
 else
     println("El modelo no pudo ser resuelto de manera óptima.")
 end
