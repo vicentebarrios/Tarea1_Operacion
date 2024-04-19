@@ -56,13 +56,14 @@ end
 
 baterias = Baterias[]
 for fila in eachrow(dataframe_baterias)
-    push!(lineas, Baterias(fila.IdBESS, fila.Cap, fila.Rend, fila.BarConexion))
+    push!(baterias, Baterias(fila.IdBESS, fila.Cap, fila.Rend, fila.BarConexion))
 end
 
 
 Time_blocks = [time for time in 1:(ncol(dataframe_demanda)-1)]
+Time_Aux = [time for time in 0:(ncol(dataframe_demanda)-1)]
 
-Potencia_base = 100 #MVA
+Potencia_base = 100; #MVA
 
 
 
@@ -81,10 +82,12 @@ set_optimizer_attribute(despacho_economico, "OutputFlag", 1) # Esto habilita la 
 @variable(despacho_economico, P_generador[g in generadores, t in Time_blocks] >= 0)
 @variable(despacho_economico, pi >= angulo_barra[b in barras, t in Time_blocks] >= -pi)
 @variable(despacho_economico, flujo[linea in lineas, t in Time_blocks]) 
-@variable(despacho_economico, energía_bat[bateria in baterias, t in Time_blocks]) 
+@variable(despacho_economico, energia_bat[bateria in baterias, t in Time_Aux]) 
 @variable(despacho_economico, potencia_bat[bateria in baterias, t in Time_blocks] >= 0) 
 
-
+for tiempo in Time_blocks
+    println("El tiempo es: ", tiempo)
+end    
 
 # La función objetivo es minimizar los costos de generación
 @objective(despacho_economico, Min, sum(generador.GenCost * P_generador[generador,tiempo] for generador in generadores for tiempo in Time_blocks))
@@ -135,6 +138,13 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
     end
     costo_total = objective_value(despacho_economico)
     println("El costo total del sistema es: ", costo_total)
+    println("--------------------------------------------")
+    for bateria in baterias
+        for tiempo in Time_Aux 
+        println("La bateria " ,bateria.IdBESS, " tiene una energía de: ", value.(energia_bat[bateria,tiempo]), " en el tiempo ", tiempo)
+        end
+        println("--------------------------------------------")
+    end   
 
 else
     println("El modelo no pudo ser resuelto de manera óptima.")
