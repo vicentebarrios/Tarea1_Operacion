@@ -112,7 +112,7 @@ if termination_status(despacho_economico) == MOI.OPTIMAL
         for tiempo in Time_blocks
             println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
             # Costo marginal asociado al balance de potencia en la barra
-            costo_marginal_barra = shadow_price(constraint_Power_balance[barra, tiempo])
+            costo_marginal_barra = dual(constraint_Power_balance[barra, tiempo])
             println("Costo marginal de la barra ", barra.IdBar, " en el tiempo ", tiempo, " es: ", costo_marginal_barra)
         end
     end
