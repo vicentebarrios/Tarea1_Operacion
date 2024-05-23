@@ -59,13 +59,7 @@ generadores = Generadores[]
 for fila in eachrow(dataframe_generadores_014)
     push!(generadores, Generadores(fila.Generator, fila.Bus, fila.Pmax, fila.Pmin, fila.Qmax,fila.Qmin, fila.Ramp, fila.Sramp, fila.MinUP, fila.MinDW, fila.InitS, fila.InitP, fila.StartUpCost, fila.FixedCost, fila.VariableCost, fila.Type, fila.PminFactor, fila.QFactor, fila.RampFactor, fila.StartUpCostFactor))
 end
-
-generadores_renovables = Generadores[]
-for fila in eachrow(dataframe_generadores_014)
-    if (fila.Generator == "Wind2" || fila.Generator == "Solar8" )
-        push!(generadores_renovables, Generadores(fila.Generator, fila.Bus, fila.Pmax, fila.Pmin, fila.Qmax,fila.Qmin, fila.Ramp, fila.Sramp, fila.MinUP, fila.MinDW, fila.InitS, fila.InitP, fila.StartUpCost, fila.FixedCost, fila.VariableCost, fila.Type, fila.PminFactor, fila.QFactor, fila.RampFactor, fila.StartUpCostFactor))
-    end
-end
+#println(typeof(dataframe_generadores_014.Generator))
 
 barras = Barras[]
 for fila in eachrow(dataframe_demanda_014)
@@ -82,9 +76,9 @@ for fila in eachrow(dataframe_pronosticos_014)
     push!(pronosticos, Pronosticos(fila.Hour, [value for value in fila[2:end]]))
 end
 
-
 Time_blocks = [time for time in 1:(ncol(dataframe_demanda_014)-1)]
-Time_Aux = [time for time in 0:(ncol(dataframe_demanda_014)-1)]
+#Time_Aux = [time for time in 0:(ncol(dataframe_demanda_014)-1)]
+Time_Aux = [time for time in -8:(ncol(dataframe_demanda_014)-1)]  #Time_Aux parte de -8 para contabilizar tiempo hacia atras.
 Potencia_base = 100 #MVA
 
 
@@ -102,7 +96,6 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 
 #Creación de variables
 @variable(unit_commitment, P_generador[g in generadores, t in Time_blocks] >= 0)
-@variable(unit_commitment, P_gen_reno[g in generadores_renovables, t in Time_blocks] >= 0)
 @variable(unit_commitment, pi >= angulo_barra[b in barras, t in Time_blocks] >= -pi)
 @variable(unit_commitment, flujo[linea in lineas, t in Time_blocks]) 
 
@@ -114,35 +107,32 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # La función objetivo es minimizar los costos de generación
 @objective(unit_commitment, Min, sum(generador.VariableCost * P_generador[generador,tiempo] + generador.FixedCost * estado_gen[generador, tiempo] + generador.StartUpCost * up_gen[generador, tiempo] for generador in generadores for tiempo in Time_blocks))
 
-# Restricción de límite inferior de generación para generadores termicos
+# Restricción de límite inferior de generación para generadores 
 @constraint(unit_commitment, Lim_gen_min[generador in generadores , tiempo in Time_blocks], P_generador[generador , tiempo] >= generador.Pmin * estado_gen[generador , tiempo])
-# Restricción de límite superior de generación
+# Restricción de límite superior de generación para generadores 
 @constraint(unit_commitment, Lim_gen_max[generador in generadores, tiempo in Time_blocks], P_generador[generador, tiempo] <= generador.Pmax * estado_gen[generador, tiempo])
 # Restricción de relación variable de encendido y apagado.
-@constraint(unit_commitment, estados[generador in generadores, tiempo in Time_blocks[2:end]], up_gen[generador, tiempo]-off_gen[generador, tiempo] == estado_gen[generador, tiempo] - estado_gen[generador, tiempo-1])
-# Restricción de condición inicial, (generador comienza apagado).
-@constraint(unit_commitment, gen_apagado_t0[generador in generadores], estado_gen[generador, 0] == 0)
-#Restricción de rampas de generación, considerando encendido de generador
+@constraint(unit_commitment, estados[generador in generadores, tiempo in Time_blocks], up_gen[generador, tiempo]-off_gen[generador, tiempo] == estado_gen[generador, tiempo] - estado_gen[generador, tiempo-1])
+# Restricción de rampas de generación, considerando encendido de generador
 @constraint(unit_commitment, Rampa_encendido[generador in generadores, tiempo in Time_blocks[2:end]], P_generador[generador, tiempo] - P_generador[generador, tiempo-1] <= generador.Ramp + generador.SRamp * up_gen[generador, tiempo])
-#Restricción de rampas de generación, considerando apagado de generador
+# Restricción de rampas de generación, considerando apagado de generador
 @constraint(unit_commitment, Rampa_apagado[generador in generadores, tiempo in Time_blocks[2:end]], - generador.SRamp * off_gen[generador, tiempo] -generador.Ramp <= P_generador[generador, tiempo] - P_generador[generador, tiempo-1])
-#Restricción de mínimo tiempo de encendido
-@constraint(unit_commitment, min_t_encendido[generador in generadores, tiempo in Time_blocks[2:end]], sum(estado_gen[generador, tiempo] for tiempo in Time_blocks[max(1, tiempo - generador.MinUP):tiempo-1]) >= generador.MinUP * off_gen[generador, tiempo])
-#Restricción de mínimo tiempo de apagado
-@constraint(unit_commitment, min_t_apagado[generador in generadores, tiempo in Time_blocks[2:end]], sum((1-estado_gen[generador, tiempo]) for tiempo in Time_blocks[max(1, tiempo - generador.MinDW):tiempo-1]) >= generador.MinDW * up_gen[generador, tiempo])
-#Definición flujo
+# Restricción de que los generadores llevan suficiente tiempo apagado para que sean encendidos en t=1.
+@constraint(unit_commitment, est_ini[generador in generadores], sum(estado_gen[generador, generador.InitS+i] for i in 1:(-generador.InitS)) == 0)
+# Restricción de mínimo tiempo de encendido
+@constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, tiempo] for tiempo in Time_blocks[max(1, tiempo - generador.MinUP):(tiempo-1)]) >= generador.MinUP * off_gen[generador, tiempo])
+# Restricción de mínimo tiempo de apagado
+@constraint(unit_commitment, min_t_off[generador in generadores, tiempo in Time_blocks], sum((1-estado_gen[generador, tiempo]) for tiempo in Time_blocks[max(1, tiempo - generador.MinDW):tiempo-1]) >= generador.MinDW * up_gen[generador, tiempo])
+# Definición flujo
 @constraint(unit_commitment, flujo_linea[linea in lineas, tiempo in Time_blocks], flujo[linea, tiempo] == Potencia_base * (angulo_barra[first(a for a in barras if a.IdBar == linea.FromBus), tiempo] - angulo_barra[first(a for a in barras if a.IdBar == linea.ToBus), tiempo])/(linea.Reactance))
-#Límite de flujo por línea
+# Límite de flujo por línea
 @constraint(unit_commitment, limite_flujo[linea in lineas, tiempo in Time_blocks], - linea.MaxFlow <= flujo[linea, tiempo] <= linea.MaxFlow)
-#Balance de potencia
+# Balance de potencia
 @constraint(unit_commitment, Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Bus == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.FromBus == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.ToBus == barra.IdBar) == barra.Demanda[tiempo])
 # Restricción de generación de renovables cumpla con pronostico
-@constraint(unit_commitment, gen_renovable[pronostico in pronosticos, tiempo in Time_blocks], sum(P_gen_reno[generador, tiempo] for generador in generadores_renovables if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
-# Restricción de igualdad entre la generación del generador renovable en lista generadores_renovables y el generador renovable que está en la lista generadores.
-@constraint(unit_commitment, rel_variable[generador in generadores_renovables, tiempo in Time_blocks], P_gen_reno[generador, tiempo] == sum(P_generador[generador_todos, tiempo] for generador_todos in generadores if generador_todos.Generator == generador.Generator ))
+@constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
 # Restricción para fijar en cero el ángulo de la primera barra
 @constraint(unit_commitment, barra_slack[tiempo in Time_blocks], angulo_barra[barras[1], tiempo] .== 0)
-
 
 # Resolver el modelo
 optimize!(unit_commitment)
