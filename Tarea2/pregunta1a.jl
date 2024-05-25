@@ -78,7 +78,7 @@ end
 
 Time_blocks = [time for time in 1:(ncol(dataframe_demanda_014)-1)]
 #Time_Aux = [time for time in 0:(ncol(dataframe_demanda_014)-1)]
-Time_Aux = [time for time in -8:(ncol(dataframe_demanda_014)-1)]  #Time_Aux parte de -8 para contabilizar tiempo hacia atras.
+Time_Aux = [time for time in (minimum([generador.InitS for generador in generadores])+1):(ncol(dataframe_demanda_014)-1)]  #Time_Aux parte de -8 para contabilizar tiempo hacia atras.
 Potencia_base = 100 #MVA
 
 
@@ -114,13 +114,13 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Restricción de relación variable de encendido y apagado.
 @constraint(unit_commitment, estados[generador in generadores, tiempo in Time_blocks], up_gen[generador, tiempo]-off_gen[generador, tiempo] == estado_gen[generador, tiempo] - estado_gen[generador, tiempo-1])
 # Restricción de rampas de generación, considerando encendido de generador
-@constraint(unit_commitment, Rampa_encendido[generador in generadores, tiempo in Time_blocks[2:end]], P_generador[generador, tiempo] - P_generador[generador, tiempo-1] <= generador.Ramp + generador.SRamp * up_gen[generador, tiempo])
+@constraint(unit_commitment, Rampa_encendido[generador in generadores, tiempo in Time_blocks[2:end]], P_generador[generador, tiempo] - P_generador[generador, tiempo-1] <= generador.Ramp * (1- up_gen[generador, tiempo]) + generador.SRamp * up_gen[generador, tiempo])
 # Restricción de rampas de generación, considerando apagado de generador
-@constraint(unit_commitment, Rampa_apagado[generador in generadores, tiempo in Time_blocks[2:end]], - generador.SRamp * off_gen[generador, tiempo] -generador.Ramp <= P_generador[generador, tiempo] - P_generador[generador, tiempo-1])
+@constraint(unit_commitment, Rampa_apagado[generador in generadores, tiempo in Time_blocks[2:end]], - generador.SRamp * off_gen[generador, tiempo] -generador.Ramp*(1-off_gen[generador, tiempo]) <= P_generador[generador, tiempo] - P_generador[generador, tiempo-1])
 # Restricción de que los generadores llevan suficiente tiempo apagado para que sean encendidos en t=1.
-@constraint(unit_commitment, est_ini[generador in generadores], sum(estado_gen[generador, generador.InitS+i] for i in 1:(-generador.InitS)) == 0)
+@constraint(unit_commitment, est_ini[generador in generadores], sum(estado_gen[generador, generador.InitS+i] for i in 1:(-1*generador.InitS)) <= 0)
 # Restricción de mínimo tiempo de encendido
-@constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, tiempo] for tiempo in Time_blocks[max(1, tiempo - generador.MinUP):(tiempo-1)]) >= generador.MinUP * off_gen[generador, tiempo])
+@constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, t] for t in Time_Aux[max(1, tiempo - generador.MinUP):(tiempo-1)]) >= generador.MinUP * off_gen[generador, tiempo])
 # Restricción de mínimo tiempo de apagado
 @constraint(unit_commitment, min_t_off[generador in generadores, tiempo in Time_blocks], sum((1-estado_gen[generador, tiempo]) for tiempo in Time_blocks[max(1, tiempo - generador.MinDW):tiempo-1]) >= generador.MinDW * up_gen[generador, tiempo])
 # Definición flujo
@@ -136,6 +136,28 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 
 # Resolver el modelo
 optimize!(unit_commitment)
+
+# Imprimir nombres de variables
+for v in all_variables(unit_commitment)
+    if length(name(v)) > 255
+        println("Nombre de variable demasiado largo: ", length(name(v)), name(v))
+        #println("El nombre es: ",name(v))
+    else 
+        println("No hay variables que superen el largo")
+    end 
+end
+
+# Imprimir nombres de restricciones
+# Inspect constraint names
+# Inspect constraint names
+for constr_key in keys(all_constraints)
+    constr = all_constraints[constr_key]
+    if length(string(constr)) > 255
+        println("Constraint name too long: ", constr)
+    end
+end
+
+println(unit_commitment.all_constraints)
 
 
 if termination_status(unit_commitment) == MOI.OPTIMAL
