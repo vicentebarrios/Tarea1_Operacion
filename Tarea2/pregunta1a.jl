@@ -21,16 +21,20 @@ mutable struct Generadores
     StartUpCost::Int64
     FixedCost::Int64
     VariableCost::Int64
-    Type::String7
-    PminFactor::Float64
-    QFactor::Float64
-    RampFactor::Float64
-    StartUpCostFactor::Int64   
+    Type::String7  
+end
+
+function Base.show(io::IO, generador::Generadores)
+    print(io, "Gen: ", generador.Generator)
 end
 
 mutable struct Pronosticos
     Tecnologia::String7
     Potencias::Vector{Float64}
+end
+
+function Base.show(io::IO, pronostico::Pronosticos)
+    print(io, "Tecnologia: ", pronostico.Tecnologia)
 end
 
 mutable struct Lineas
@@ -43,10 +47,20 @@ mutable struct Lineas
     MaxFlow::Int64
 end
 
+function Base.show(io::IO, linea::Lineas)
+    print(io, "Linea: ", linea.BranchName)
+end
+
 mutable struct Barras
     IdBar::String7
     Demanda::Vector{Float64}
 end
+
+function Base.show(io::IO, barra::Barras)
+    print(io, "IdBar: ", barra.IdBar)
+end
+
+
 
 # Leer el archivo CSV y almacenar los datos en un DataFrame
 dataframe_generadores_014 = CSV.read("Tarea2/Generators_014.csv", DataFrame)
@@ -57,9 +71,9 @@ dataframe_pronosticos_014 = CSV.read("Tarea2/Renewables_014.csv", DataFrame)
 ## Se crean un arrays para almacenar las instancias
 generadores = Generadores[]
 for fila in eachrow(dataframe_generadores_014)
-    push!(generadores, Generadores(fila.Generator, fila.Bus, fila.Pmax, fila.Pmin, fila.Qmax,fila.Qmin, fila.Ramp, fila.Sramp, fila.MinUP, fila.MinDW, fila.InitS, fila.InitP, fila.StartUpCost, fila.FixedCost, fila.VariableCost, fila.Type, fila.PminFactor, fila.QFactor, fila.RampFactor, fila.StartUpCostFactor))
+    push!(generadores, Generadores(fila.Generator, fila.Bus, fila.Pmax, fila.Pmin, fila.Qmax,fila.Qmin, fila.Ramp, fila.Sramp, fila.MinUP, fila.MinDW, fila.InitS, fila.InitP, fila.StartUpCost, fila.FixedCost, fila.VariableCost, fila.Type))
 end
-#println(typeof(dataframe_generadores_014.Generator))
+
 
 barras = Barras[]
 for fila in eachrow(dataframe_demanda_014)
@@ -76,12 +90,12 @@ for fila in eachrow(dataframe_pronosticos_014)
     push!(pronosticos, Pronosticos(fila.Hour, [value for value in fila[2:end]]))
 end
 
+
 Time_blocks = [time for time in 1:(ncol(dataframe_demanda_014)-1)]
-#Time_Aux = [time for time in 0:(ncol(dataframe_demanda_014)-1)]
 Time_Aux = [time for time in (minimum([generador.InitS for generador in generadores])+1):(ncol(dataframe_demanda_014)-1)]  #Time_Aux parte de -8 para contabilizar tiempo hacia atras.
 Potencia_base = 100 #MVA
 
-#holaaag
+
 
     #######################
     ### Creación Modelo ###
@@ -137,27 +151,8 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Resolver el modelo
 optimize!(unit_commitment)
 
-# Imprimir nombres de variables
-for v in all_variables(unit_commitment)
-    if length(name(v)) > 255
-        println("Nombre de variable demasiado largo: ", length(name(v)), name(v))
-        #println("El nombre es: ",name(v))
-    else 
-        println("No hay variables que superen el largo")
-    end 
-end
+print(termination_status(unit_commitment))
 
-# Imprimir nombres de restricciones
-# Inspect constraint names
-# Inspect constraint names
-for constr_key in keys(all_constraints)
-    constr = all_constraints[constr_key]
-    if length(string(constr)) > 255
-        println("Constraint name too long: ", constr)
-    end
-end
-
-println(unit_commitment.all_constraints)
 
 
 if termination_status(unit_commitment) == MOI.OPTIMAL
@@ -187,3 +182,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
 else
     println("El modelo no pudo ser resuelto de manera óptima.")
 end
+
+
+
+
