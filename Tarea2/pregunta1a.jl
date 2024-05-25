@@ -81,7 +81,7 @@ Time_blocks = [time for time in 1:(ncol(dataframe_demanda_014)-1)]
 Time_Aux = [time for time in (minimum([generador.InitS for generador in generadores])+1):(ncol(dataframe_demanda_014)-1)]  #Time_Aux parte de -8 para contabilizar tiempo hacia atras.
 Potencia_base = 100 #MVA
 
-
+#holaaag
 
     #######################
     ### Creación Modelo ###
