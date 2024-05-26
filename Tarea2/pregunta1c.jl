@@ -135,9 +135,9 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Restricción de que los generadores llevan suficiente tiempo apagado para que sean encendidos en t=1.
 @constraint(unit_commitment, est_ini[generador in generadores, tiempo in Time_Aux[1:-1*minimum([generador.InitS for generador in generadores])]], estado_gen[generador, tiempo] == 0)
 # Restricción de mínimo tiempo de encendido
- @constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, t] for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinUP):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinUP * off_gen[generador, tiempo])
+# @constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, t] for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinUP):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinUP * off_gen[generador, tiempo])
  # Restricción de mínimo tiempo de apagado
- @constraint(unit_commitment, min_t_off[generador in generadores, tiempo in Time_blocks], sum((1-estado_gen[generador, t]) for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinDW):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinDW * up_gen[generador, tiempo])
+# @constraint(unit_commitment, min_t_off[generador in generadores, tiempo in Time_blocks], sum((1-estado_gen[generador, t]) for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinDW):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinDW * up_gen[generador, tiempo])
 # Definición flujo
 @constraint(unit_commitment, flujo_linea[linea in lineas, tiempo in Time_blocks], flujo[linea, tiempo] == Potencia_base * (angulo_barra[first(a for a in barras if a.IdBar == linea.FromBus), tiempo] - angulo_barra[first(a for a in barras if a.IdBar == linea.ToBus), tiempo])/(linea.Reactance))
 # Límite de flujo por línea
@@ -163,7 +163,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
     for generador in generadores
         for tiempo in Time_blocks
         #println("P_generador del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(P_generador[generador, tiempo]))
-        #println("Estado del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(estado_gen[generador, tiempo]))
+        println("Estado del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(estado_gen[generador, tiempo]))
         global variable_cost = variable_cost + generador.VariableCost * value.(P_generador[generador,tiempo])
         global no_load_cost = no_load_cost + generador.FixedCost * value.(estado_gen[generador, tiempo])
         global start_cost = start_cost + generador.StartUpCost * value.(up_gen[generador, tiempo])
@@ -176,7 +176,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
     end
     for barra in barras
         for tiempo in Time_blocks
-            println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
+            #println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
             # Costo marginal asociado al balance de potencia en la barra
             #costo_marginal_barra = dual(Power_balance[barra, tiempo])
             #println("Costo marginal de la barra ", barra.IdBar, " en el tiempo ", tiempo, " es: ", costo_marginal_barra)
@@ -208,6 +208,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
             demanda_barra = demanda_barra + barra.Demanda[tiempo]
         end
         push!(lista_demandas, demanda_barra)
+
 
         for generador in generadores
             if generador.Generator == "G1"
