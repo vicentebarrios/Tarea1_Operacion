@@ -1,9 +1,10 @@
+using XLSX
 using JuMP
 using Gurobi
 using CSV
 using DataFrames
 using Plots
-#plotlyjs()
+
 
 #Creación estructura generadores
 mutable struct Generadores
@@ -22,7 +23,11 @@ mutable struct Generadores
     StartUpCost::Int64
     FixedCost::Int64
     VariableCost::Int64
-    Type::String7  
+    Type::String
+    PMinFactor::Float64
+    QFactor::Float64
+    RampFactor::Float64
+    StartUpCostFactor::Int64
 end
 
 function Base.show(io::IO, generador::Generadores)
@@ -30,7 +35,7 @@ function Base.show(io::IO, generador::Generadores)
 end
 
 mutable struct Pronosticos
-    Tecnologia::String7
+    Tecnologia::String15
     Potencias::Vector{Float64}
 end
 
@@ -61,34 +66,55 @@ function Base.show(io::IO, barra::Barras)
     print(io, "IdBar: ", barra.IdBar)
 end
 
+# Ruta al archivo Excel
+ruta_excel = "Tarea2/Case014.xlsx"
+
+# Leer los datos de la hoja de cálculo en un DataFrame
+dataframe_generadores_014 = DataFrame(XLSX.readtable(ruta_excel, "Generators"))
+xlsx_data_demanda = XLSX.readdata(ruta_excel, "Demand", "A2:Y16")
+column_names_demanda = xlsx_data_demanda[1, :]
+# Create DataFrame excluding the first row
+dataframe_demanda_014 = DataFrame(xlsx_data_demanda[2:end, :], Symbol.(column_names_demanda))
+dataframe_lineas_014 = DataFrame(XLSX.readtable(ruta_excel, "Lines"))
+#dataframe_buses_014 = DataFrame(XLSX.readtable(ruta_excel, "Buses"))
+xlsx_data_renovables = XLSX.readdata(ruta_excel, "Renewables", "A2:Y4")
+column_names_renovables = xlsx_data_renovables[1, :]
+dataframe_pronosticos_014 = DataFrame(xlsx_data_renovables[2:end, :], Symbol.(column_names_renovables))
+
 
 
 # Leer el archivo CSV y almacenar los datos en un DataFrame
-dataframe_generadores_014 = CSV.read("Tarea2/Generators_014.csv", DataFrame)
-dataframe_demanda_014 = CSV.read("Tarea2/Demand_014.csv", DataFrame)
-dataframe_lineas_014 = CSV.read("Tarea2/Lines_014.csv", DataFrame)
-dataframe_buses_014 = CSV.read("Tarea2/Buses_014.csv", DataFrame)
-dataframe_pronosticos_014 = CSV.read("Tarea2/Renewables_014.csv", DataFrame)
+#dataframe_generadores_014 = CSV.read("Tarea2/Generators_014.csv", DataFrame)
+#dataframe_demanda_014 = CSV.read("Tarea2/Demand_014.csv", DataFrame)
+#dataframe_lineas_014 = CSV.read("Tarea2/Lines_014.csv", DataFrame)
+#dataframe_buses_014 = CSV.read("Tarea2/Buses_014.csv", DataFrame)
+#dataframe_pronosticos_014 = CSV.read("Tarea2/Renewables_014.csv", DataFrame)
 ## Se crean un arrays para almacenar las instancias
+
 generadores = Generadores[]
 for fila in eachrow(dataframe_generadores_014)
-    push!(generadores, Generadores(fila.Generator, fila.Bus, fila.Pmax, fila.Pmin, fila.Qmax,fila.Qmin, fila.Ramp, fila.Sramp, fila.MinUP, fila.MinDW, fila.InitS, fila.InitP, fila.StartUpCost, fila.FixedCost, fila.VariableCost, fila.Type))
+    if fila.Generator != "END"
+        push!(generadores, Generadores(fila.Generator, fila.Bus, fila."Pmax [MW]", fila."Pmin [MW]", fila."Qmax [MVAR]",fila."Qmin [MVAR]", fila."Ramp [MW/h]", fila."SRamp [MW]", fila."MinUP", fila."MinDW", fila."InitS", fila."InitP", fila."StartUpCost [\$]", fila."FixedCost [\$]", fila."VariableCost [\$/MWh]", fila."Type", fila."PminFactor", fila."QFactor", fila."RampFactor", fila."StartUpCostFactor"))
+    end
 end
 
 
 barras = Barras[]
 for fila in eachrow(dataframe_demanda_014)
-    push!(barras, Barras(fila.IdBar, [value for value in fila[2:end]]))
+    push!(barras, Barras(fila."Bus/Hour", [value for value in fila[2:end]]))
 end
 
 lineas = Lineas[]
 for fila in eachrow(dataframe_lineas_014)
-    push!(lineas, Lineas(fila.IdLin, fila.FromBus, fila.ToBus, fila.Resistance, fila.Reactance, fila.LineCharging, fila.MaxFlow))
+    if (fila."Branch Name" != "END")
+        push!(lineas, Lineas(fila."Branch Name", fila."FromBus", fila."ToBus", fila."Resistance (R)", fila."Reactance (X)", fila."LineCharging (B)", fila."Max Flow [MW]"))
+    end
 end
+
 
 pronosticos = Pronosticos[]
 for fila in eachrow(dataframe_pronosticos_014)
-    push!(pronosticos, Pronosticos(fila.Hour, [value for value in fila[2:end]]))
+    push!(pronosticos, Pronosticos(fila."Gen/Hour", [value for value in fila[2:end]]))
 end
 
 
@@ -163,7 +189,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
     for generador in generadores
         for tiempo in Time_blocks
         #println("P_generador del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(P_generador[generador, tiempo]))
-        println("Estado del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(estado_gen[generador, tiempo]))
+        #println("Estado del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(estado_gen[generador, tiempo]))
         global variable_cost = variable_cost + generador.VariableCost * value.(P_generador[generador,tiempo])
         global no_load_cost = no_load_cost + generador.FixedCost * value.(estado_gen[generador, tiempo])
         global start_cost = start_cost + generador.StartUpCost * value.(up_gen[generador, tiempo])
@@ -176,7 +202,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
     end
     for barra in barras
         for tiempo in Time_blocks
-            #println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
+            println("Ángulo de la barra ", barra.IdBar," en el tiempo ", tiempo ," es: ", value.(angulo_barra[barra, tiempo]))
             # Costo marginal asociado al balance de potencia en la barra
             #costo_marginal_barra = dual(Power_balance[barra, tiempo])
             #println("Costo marginal de la barra ", barra.IdBar, " en el tiempo ", tiempo, " es: ", costo_marginal_barra)
@@ -208,7 +234,6 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
             demanda_barra = demanda_barra + barra.Demanda[tiempo]
         end
         push!(lista_demandas, demanda_barra)
-
 
         for generador in generadores
             if generador.Generator == "G1"

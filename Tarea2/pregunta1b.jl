@@ -114,7 +114,7 @@ end
 
 pronosticos = Pronosticos[]
 for fila in eachrow(dataframe_pronosticos_014)
-    push!(pronosticos, Pronosticos(fila.Hour, [value for value in fila[2:end]]))
+    push!(pronosticos, Pronosticos(fila."Gen/Hour", [value for value in fila[2:end]]))
 end
 
 
