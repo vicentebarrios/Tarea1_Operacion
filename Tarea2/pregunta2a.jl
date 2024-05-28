@@ -141,7 +141,7 @@ list_int_conf_99_up_total = []
 for t in 1:n_horas
     sigma_wind = pronosticos[1].Potencias[t]*lista_kt_wind[t] 
     sigma_solar = pronosticos[2].Potencias[t]*lista_kt_solar[t] 
-    sigma_total = sigma_wind+sigma_solar
+    sigma_total = sqrt(sigma_wind^2+sigma_solar^2)
     push!(list_int_conf_90_dw_total, pronosticos[3].Potencias[t] - 1.645 * sigma_total) 
     push!(list_int_conf_90_up_total, pronosticos[3].Potencias[t] + 1.645 * sigma_total)  
     push!(list_int_conf_99_dw_total, pronosticos[3].Potencias[t] - 2.575 * sigma_total) 
