@@ -11,40 +11,57 @@ using Plots
 mutable struct Pronosticos
     Tecnologia::String15
     Potencias::Vector{Float64}
+    int_conf_up_90::Vector{Float64}
+    int_conf_dw_90::Vector{Float64}
+    int_conf_up_99::Vector{Float64}
+    int_conf_dw_99::Vector{Float64}
 end
 
 function Base.show(io::IO, pronostico::Pronosticos)
     print(io, "Tecnologia: ", pronostico.Tecnologia)
 end
 
+mutable struct Pronosticos_escenarios
+    Tecnologia::String15
+    Escenario::Int64
+    Potencias::Vector{Float64}
+end
+
+function Base.show(io::IO, pronostico::Pronosticos_escenarios)
+    print(io, "Tecnologia: ", pronostico.Tecnologia)
+end
+
 # Ruta al archivo Excel
 ruta_excel = "Tarea2/Case118.xlsx"
+
 # Leer los datos de la hoja de cálculo en un DataFrame
-xlsx_data_renovables = XLSX.readdata(ruta_excel, "Renewables", "A66:Y67")
-total_renovable = [sum(xlsx_data_renovables[:, i]) for i in 2:25]
-total_renovable = vcat(["Total Renovable"], total_renovable)
+xlsx_data_renovables = XLSX.readdata(ruta_excel, "Renewables", "A2:Y62")
+column_names_renovables = xlsx_data_renovables[1, :]
+dataframe_pronosticos_118 = DataFrame(xlsx_data_renovables[2:end, :], Symbol.(column_names_renovables))
 
-column_names_renovables = Vector{Any}()
-# Agregar la palabra "tecnología" al vector y las horas
-push!(column_names_renovables, "tecnología")
-for i in 1:24
-    push!(column_names_renovables, i)
-end
-dataframe_pronosticos_118 = DataFrame(xlsx_data_renovables[1:end, :], Symbol.(column_names_renovables))
-
-# Agregar la fila total renovable al DataFrame
-push!(dataframe_pronosticos_118, total_renovable)
-
-
-
-pronosticos = Pronosticos[]
-for fila in eachrow(dataframe_pronosticos_118)
-    push!(pronosticos, Pronosticos(fila."tecnología", [value for value in fila[2:end]]))
-end
-
+#parametros
 n_escenarios = 100
 n_horas = 24
 
+
+#Se carga info al struct
+
+pronosticos = Pronosticos[]
+for fila in eachrow(dataframe_pronosticos_118)
+    push!(pronosticos, Pronosticos(fila."Gen/Hour", [value for value in fila[2:end]], [], [], [], []))
+end
+
+pronosticos_escenarios = Pronosticos_escenarios[]
+for fila in eachrow(dataframe_pronosticos_118)
+    for escenario in 1:n_escenarios
+        push!(pronosticos_escenarios, Pronosticos_escenarios(fila."Gen/Hour", escenario, []))
+    end
+end
+
+
+
+
+#Definición de función para obtener parámetro útil para determinar std dev
 interpolate_std(k1, k24, t) = k1 + (k24 - k1) * (t - 1) / 23
 lista_kt_wind = []
 lista_kt_solar = []
@@ -55,36 +72,63 @@ for i in 1:n_horas
     push!(lista_kt_solar, kt_i_sol)
 end
 
-escenarios_total_wind = zeros(n_horas,n_escenarios) # Se crea una matriz de ceros con horas filas y n_escenarios columnas.
-list_int_conf_90_dw = []
-list_int_conf_90_up = []
-list_int_conf_99_dw = []
-list_int_conf_99_up = []
+#escenarios_total_wind = zeros(n_horas,n_escenarios) # Se crea una matriz de ceros con horas filas y n_escenarios columnas.
+#list_int_conf_90_dw = []
+#list_int_conf_90_up = []
+#list_int_conf_99_dw = []
+#list_int_conf_99_up = []
 
-# Calculo escenarios total Wind #
-for t in 1:n_horas
-    sigma = pronosticos[1].Potencias[t]*lista_kt_wind[t]  # Pronóstico x k_t
-    error = Normal(0,sigma)  # Error de pronóstico
-    push!(list_int_conf_90_dw, pronosticos[1].Potencias[t] - 1.645 * sigma) 
-    push!(list_int_conf_90_up, pronosticos[1].Potencias[t] + 1.645 * sigma)  
-    push!(list_int_conf_99_dw, pronosticos[1].Potencias[t] - 2.575 * sigma) 
-    push!(list_int_conf_99_up, pronosticos[1].Potencias[t] + 2.575 * sigma)                           
-    for escenario in 1:n_escenarios
-        escenarios_total_wind[t,escenario] = max(0,pronosticos[1].Potencias[t]+rand(error))
+# Calculo escenarios #
+for tecnologia in pronosticos
+    #eolica
+    if startswith(tecnologia.Tecnologia,"W")
+        for t in 1:n_horas
+            sigma = tecnologia.Potencias[t]*lista_kt_wind[t]  # Pronóstico x k_t
+            push!(tecnologia.int_conf_dw_90,tecnologia.Potencias[t] - 1.645 * sigma)
+            push!(tecnologia.int_conf_up_90,tecnologia.Potencias[t] + 1.645 * sigma)
+            push!(tecnologia.int_conf_dw_99,tecnologia.Potencias[t] - 2.575 * sigma)
+            push!(tecnologia.int_conf_up_99,tecnologia.Potencias[t] + 2.575 * sigma)
+            for escenario in pronosticos_escenarios
+                if escenario.Tecnologia == tecnologia.Tecnologia
+                    error = Normal(0,sigma)  # Error de pronóstico
+                    push!(escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                    break
+                end
+            end
+        end
+
+    #solar
+    elseif startswith(tecnologia.Tecnologia,"S")
+        for t in 1:n_horas
+            sigma = tecnologia.Potencias[t]*lista_kt_solar[t]  # Pronóstico x k_t
+            push!(tecnologia.int_conf_dw_90,tecnologia.Potencias[t] - 1.645 * sigma)
+            push!(tecnologia.int_conf_up_90,tecnologia.Potencias[t] + 1.645 * sigma)
+            push!(tecnologia.int_conf_dw_99,tecnologia.Potencias[t] - 2.575 * sigma)
+            push!(tecnologia.int_conf_up_99,tecnologia.Potencias[t] + 2.575 * sigma)
+            for escenario in pronosticos_escenarios
+                if escenario.Tecnologia == tecnologia.Tecnologia
+                    error = Normal(0,sigma)  # Error de pronóstico
+                    push!(escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                    break
+                end
+            end
+        end
     end
 end
 
+
+
+# Plot eolico
 plot()
 # Iterar sobre las columnas y agregarlas al gráfico
-for i in 1:size(escenarios_total_wind, 2)
-    #plot!(escenarios_total_wind[:, i], label="Escenario $i", linewidth=0.5)
-    plot!(escenarios_total_wind[:, i], label=nothing, linewidth=0.5)
+for i in 1:n_escenarios
+    plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if startswith(tecnologia.Tecnologia, "W") && tecnologia.Escenario == i], dims=1), label=nothing, linewidth=0.5)
 end
-plot!(pronosticos[1].Potencias, label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_90_dw, label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_90_up, label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_99_dw, label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_99_up, label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.int_conf_dw_90 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.int_conf_up_90 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.int_conf_dw_99 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.int_conf_up_99 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
 # Personalizar el gráfico
 xlabel!("Horas")
 ylabel!("Potencia")
