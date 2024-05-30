@@ -84,15 +84,18 @@ for tecnologia in pronosticos
     if startswith(tecnologia.Tecnologia,"W")
         for t in 1:n_horas
             sigma = tecnologia.Potencias[t]*lista_kt_wind[t]  # Pronóstico x k_t
+            error = Normal(0,sigma)  # Error de pronóstico
             push!(tecnologia.int_conf_dw_90,tecnologia.Potencias[t] - 1.645 * sigma)
             push!(tecnologia.int_conf_up_90,tecnologia.Potencias[t] + 1.645 * sigma)
             push!(tecnologia.int_conf_dw_99,tecnologia.Potencias[t] - 2.575 * sigma)
             push!(tecnologia.int_conf_up_99,tecnologia.Potencias[t] + 2.575 * sigma)
-            for escenario in pronosticos_escenarios
-                if escenario.Tecnologia == tecnologia.Tecnologia
-                    error = Normal(0,sigma)  # Error de pronóstico
-                    push!(escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
-                    break
+            for pronostico_escenario in pronosticos_escenarios
+                if pronostico_escenario.Tecnologia == tecnologia.Tecnologia
+                    for escenario in 1:n_escenarios
+                        if escenario == pronostico_escenario.Escenario
+                            push!(pronostico_escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                        end
+                    end
                 end
             end
         end
@@ -101,15 +104,18 @@ for tecnologia in pronosticos
     elseif startswith(tecnologia.Tecnologia,"S")
         for t in 1:n_horas
             sigma = tecnologia.Potencias[t]*lista_kt_solar[t]  # Pronóstico x k_t
+            error = Normal(0,sigma)  # Error de pronóstico
             push!(tecnologia.int_conf_dw_90,tecnologia.Potencias[t] - 1.645 * sigma)
             push!(tecnologia.int_conf_up_90,tecnologia.Potencias[t] + 1.645 * sigma)
             push!(tecnologia.int_conf_dw_99,tecnologia.Potencias[t] - 2.575 * sigma)
             push!(tecnologia.int_conf_up_99,tecnologia.Potencias[t] + 2.575 * sigma)
-            for escenario in pronosticos_escenarios
-                if escenario.Tecnologia == tecnologia.Tecnologia
-                    error = Normal(0,sigma)  # Error de pronóstico
-                    push!(escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
-                    break
+            for pronostico_escenario in pronosticos_escenarios
+                if pronostico_escenario.Tecnologia == tecnologia.Tecnologia
+                    for escenario in 1:n_escenarios
+                        if escenario == pronostico_escenario.Escenario
+                            push!(pronostico_escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                        end
+                    end
                 end
             end
         end
@@ -125,45 +131,27 @@ for i in 1:n_escenarios
     plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if startswith(tecnologia.Tecnologia, "W") && tecnologia.Escenario == i], dims=1), label=nothing, linewidth=0.5)
 end
 plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
-plot!(sum([pronostico.int_conf_dw_90 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(sum([pronostico.int_conf_up_90 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(sum([pronostico.int_conf_dw_99 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-plot!(sum([pronostico.int_conf_up_99 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1), label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1)[1] - 1.645*sum([(pronostico.int_conf_dw_90 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")]/(1.645^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1)[1] + 1.645*sum([(pronostico.int_conf_up_90 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")]/(1.645^2), dims = 1)[1].^(1/2), label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1)[1] - 2.575*sum([(pronostico.int_conf_dw_99 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")]/(2.575^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")], dims = 1)[1] + 2.575*sum([(pronostico.int_conf_up_99 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "W")]/(2.575^2), dims = 1)[1].^(1/2), label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
 # Personalizar el gráfico
 xlabel!("Horas")
 ylabel!("Potencia")
 title!("Simulación escenarios de total eólica")
 savefig("WindEscenarios.png")
 
-
-# Calculo escenarios total Solar #
-escenarios_total_solar = zeros(n_horas,n_escenarios)
-list_int_conf_90_dw_solar = []
-list_int_conf_90_up_solar = []
-list_int_conf_99_dw_solar = []
-list_int_conf_99_up_solar = []
-for t in 1:n_horas
-    sigma = pronosticos[2].Potencias[t]*lista_kt_solar[t]  # Pronóstico x k_t
-    error = Normal(0,sigma)                               # Error de pronóstico
-    push!(list_int_conf_90_dw_solar, pronosticos[2].Potencias[t] - 1.645 * sigma) 
-    push!(list_int_conf_90_up_solar, pronosticos[2].Potencias[t] + 1.645 * sigma)  
-    push!(list_int_conf_99_dw_solar, pronosticos[2].Potencias[t] - 2.575 * sigma) 
-    push!(list_int_conf_99_up_solar, pronosticos[2].Potencias[t] + 2.575 * sigma)  
-    for escenario in 1:n_escenarios
-        escenarios_total_solar[t,escenario] = max(0,pronosticos[2].Potencias[t]+rand(error))
-    end
-end
+# Plot solar
 plot()
 # Iterar sobre las columnas y agregarlas al gráfico
-for i in 1:size(escenarios_total_solar, 2)
-    plot!(escenarios_total_solar[:, i], label=nothing, linewidth=0.5)
+for i in 1:n_escenarios
+    plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if startswith(tecnologia.Tecnologia, "S") && tecnologia.Escenario == i], dims=1), label=nothing, linewidth=0.5)
 end
-plot!(pronosticos[2].Potencias, label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_90_dw_solar, label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_90_up_solar, label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_99_dw_solar, label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_99_up_solar, label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")], dims = 1), label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")], dims = 1)[1] - 1.645*sum([(pronostico.int_conf_dw_90 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")]/(1.645^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")], dims = 1)[1] + 1.645*sum([(pronostico.int_conf_up_90 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")]/(1.645^2), dims = 1)[1].^(1/2), label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")], dims = 1)[1] - 2.575*sum([(pronostico.int_conf_dw_99 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")]/(2.575^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")], dims = 1)[1] + 2.575*sum([(pronostico.int_conf_up_99 - pronostico.Potencias).^2 for pronostico in pronosticos if startswith(pronostico.Tecnologia, "S")]/(2.575^2), dims = 1)[1].^(1/2), label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
 # Personalizar el gráfico
 xlabel!("Horas")
 ylabel!("Potencia")
@@ -171,38 +159,17 @@ title!("Simulación escenarios de total solar")
 savefig("SolarEscenarios.png")
 
 
-
-
-# Calculo escenarios total Renovable (eólico + solar) #
-escenarios_total_renovable = zeros(n_horas,n_escenarios)
-escenarios_total_renovable = escenarios_total_wind + escenarios_total_solar 
- 
-list_int_conf_90_dw_total = []
-list_int_conf_90_up_total = []
-list_int_conf_99_dw_total = []
-list_int_conf_99_up_total = []
-
-for t in 1:n_horas
-    sigma_wind = pronosticos[1].Potencias[t]*lista_kt_wind[t] 
-    sigma_solar = pronosticos[2].Potencias[t]*lista_kt_solar[t] 
-    sigma_total = sqrt(sigma_wind^2+sigma_solar^2)
-    push!(list_int_conf_90_dw_total, pronosticos[3].Potencias[t] - 1.645 * sigma_total) 
-    push!(list_int_conf_90_up_total, pronosticos[3].Potencias[t] + 1.645 * sigma_total)  
-    push!(list_int_conf_99_dw_total, pronosticos[3].Potencias[t] - 2.575 * sigma_total) 
-    push!(list_int_conf_99_up_total, pronosticos[3].Potencias[t] + 2.575 * sigma_total)  
-end
-
+# Plot total
 plot()
 # Iterar sobre las columnas y agregarlas al gráfico
-for i in 1:size(escenarios_total_renovable, 2)
-    plot!(escenarios_total_renovable[:, i], label=nothing, linewidth=0.5)
+for i in 1:n_escenarios
+    plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if tecnologia.Escenario == i], dims=1), label=nothing, linewidth=0.5)
 end
-plot!(pronosticos[3].Potencias, label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_90_dw_total, label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_90_up_total, label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
-plot!(list_int_conf_99_dw_total, label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-plot!(list_int_conf_99_up_total, label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
-
+plot!(sum([pronostico.Potencias for pronostico in pronosticos], dims = 1), label="Valor esperado", linewidth=4, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos], dims = 1)[1] - 1.645*sum([(pronostico.int_conf_dw_90 - pronostico.Potencias).^2 for pronostico in pronosticos]/(1.645^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos], dims = 1)[1] + 1.645*sum([(pronostico.int_conf_up_90 - pronostico.Potencias).^2 for pronostico in pronosticos]/(1.645^2), dims = 1)[1].^(1/2), label="Int Conf 90%", linewidth=4, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos], dims = 1)[1] - 2.575*sum([(pronostico.int_conf_dw_99 - pronostico.Potencias).^2 for pronostico in pronosticos]/(2.575^2), dims = 1)[1].^(1/2), label=nothing, linewidth=4,linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
+plot!(sum([pronostico.Potencias for pronostico in pronosticos], dims = 1)[1] + 2.575*sum([(pronostico.int_conf_up_99 - pronostico.Potencias).^2 for pronostico in pronosticos]/(2.575^2), dims = 1)[1].^(1/2), label="Int Conf 99%", linewidth=4, linecolor=RGB(1.0, 0.0, 0.0), linestyle=:dash)
 # Personalizar el gráfico
 xlabel!("Horas")
 ylabel!("Potencia")

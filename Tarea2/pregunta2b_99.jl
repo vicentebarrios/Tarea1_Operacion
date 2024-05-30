@@ -1,8 +1,9 @@
+using Distributions
 using XLSX
-using DataFrames
 using JuMP
 using Gurobi
 using CSV
+using DataFrames
 using Plots
 
 
@@ -38,11 +39,25 @@ end
 mutable struct Pronosticos
     Tecnologia::String15
     Potencias::Vector{Float64}
+    z_90::Vector{Float64}
+    z_99::Vector{Float64}
 end
 
 function Base.show(io::IO, pronostico::Pronosticos)
     print(io, "Tecnologia: ", pronostico.Tecnologia)
 end
+
+mutable struct Pronosticos_escenarios
+    Tecnologia::String15
+    Escenario::Int64
+    Potencias::Vector{Float64}
+end
+
+function Base.show(io::IO, pronostico::Pronosticos_escenarios)
+    print(io, "Tecnologia: ", pronostico.Tecnologia)
+end
+
+
 
 mutable struct Lineas
     BranchName::String15
@@ -112,9 +127,23 @@ for fila in eachrow(dataframe_lineas_118)
     end
 end
 
+#parametros
+n_escenarios = 100
+n_horas = 24
+
+
+#Se carga info al struct
+
 pronosticos = Pronosticos[]
 for fila in eachrow(dataframe_pronosticos_118)
-    push!(pronosticos, Pronosticos(fila."Gen/Hour", [value for value in fila[2:end]]))
+    push!(pronosticos, Pronosticos(fila."Gen/Hour", [value for value in fila[2:end]], [], []))
+end
+
+pronosticos_escenarios = Pronosticos_escenarios[]
+for fila in eachrow(dataframe_pronosticos_118)
+    for escenario in 1:n_escenarios
+        push!(pronosticos_escenarios, Pronosticos_escenarios(fila."Gen/Hour", escenario, []))
+    end
 end
 
 Time_blocks = [time for time in 1:(ncol(dataframe_demanda_118)-1)]
@@ -124,9 +153,6 @@ Potencia_base = 100 #MVA
 
 
 # Generacion de intervalos de confianza #
-
-n_escenarios = 100
-n_horas = 24
 
 interpolate_std(k1, k24, t) = k1 + (k24 - k1) * (t - 1) / 23
 lista_kt_wind = []
@@ -138,16 +164,57 @@ for i in 1:n_horas
     push!(lista_kt_solar, kt_i_sol)
 end
 
-Reserva_90 = []
-Reserva_99 = []
 
-for t in 1:n_horas
-    sigma_wind = sum(pronosticos[i].Potencias[t] for i in 1:40)*lista_kt_wind[t] 
-    sigma_solar = sum(pronosticos[i].Potencias[t] for i in 41:60)*lista_kt_solar[t] 
-    sigma_total = sqrt(sigma_wind^2+sigma_solar^2)
-    push!(Reserva_90, 1.645 * sigma_total)   
-    push!(Reserva_99, 2.575 * sigma_total)  
+# Calculo escenarios #
+for tecnologia in pronosticos
+    #eolica
+    if startswith(tecnologia.Tecnologia,"W")
+        for t in 1:n_horas
+            sigma = tecnologia.Potencias[t]*lista_kt_wind[t]  # Pronóstico x k_t
+            error = Normal(0,sigma)  # Error de pronóstico
+            push!(tecnologia.z_90, 1.645 * sigma)
+            push!(tecnologia.z_99, 2.575 * sigma)
+            for pronostico_escenario in pronosticos_escenarios
+                if pronostico_escenario.Tecnologia == tecnologia.Tecnologia
+                    for escenario in 1:n_escenarios
+                        if escenario == pronostico_escenario.Escenario
+                            push!(pronostico_escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                        end
+                    end
+                end
+            end
+        end
+
+    #solar
+    elseif startswith(tecnologia.Tecnologia,"S")
+        for t in 1:n_horas
+            sigma = tecnologia.Potencias[t]*lista_kt_solar[t]  # Pronóstico x k_t
+            error = Normal(0,sigma)  # Error de pronóstico
+            push!(tecnologia.z_90, 1.645 * sigma)
+            push!(tecnologia.z_99, 2.575 * sigma)
+            for pronostico_escenario in pronosticos_escenarios
+                if pronostico_escenario.Tecnologia == tecnologia.Tecnologia
+                    for escenario in 1:n_escenarios
+                        if escenario == pronostico_escenario.Escenario
+                            push!(pronostico_escenario.Potencias, max(0,tecnologia.Potencias[t]+rand(error)))
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
+
+
+
+#Creación de reservas
+#Por ser distribución normal Reserva up = Reserva down por simetria
+
+
+Reserva_90 = sum([pronostico.z_90 for pronostico in pronosticos], dims = 1)[1]
+Reserva_99 = sum([pronostico.z_99 for pronostico in pronosticos], dims = 1)[1]
+
+
 
 
     #######################
@@ -158,6 +225,10 @@ end
 
 #Crear modelo unit_commitment.
 unit_commitment = Model(Gurobi.Optimizer)
+
+# Set the relative gap
+set_optimizer_attribute(unit_commitment, "MIPGap", 1e-3)
+
 # Habilitar el registro de mensajes de Gurobi para ver el progreso
 set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la salida de mensajes
 
@@ -165,7 +236,8 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 @variable(unit_commitment, P_generador[g in generadores, t in Time_blocks] >= 0)
 @variable(unit_commitment, pi >= angulo_barra[b in barras, t in Time_blocks] >= -pi)
 @variable(unit_commitment, flujo[linea in lineas, t in Time_blocks]) 
-
+#Variables de reserva
+@variable(unit_commitment, reserva_gen[generador in generadores[1:54], t in Time_blocks])
 # Variables binarias
 @variable(unit_commitment, up_gen[g in generadores, t in Time_blocks], Bin)
 @variable(unit_commitment, off_gen[g in generadores, t in Time_blocks], Bin)
@@ -197,9 +269,11 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Balance de potencia
 @constraint(unit_commitment, Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Bus == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.FromBus == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.ToBus == barra.IdBar) == barra.Demanda[tiempo])
 # Reserva up
-@constraint(unit_commitment, Reserva_up[tiempo in Time_blocks], sum(generador.Pmax * estado_gen[generador, tiempo] for generador in generadores) >= sum(barra.Demanda[tiempo] for barra in barras) + Reserva_99[tiempo])
+@constraint(unit_commitment, Const_Reserva_up[generador in generadores[1:54], tiempo in Time_blocks], generador.Pmax * estado_gen[generador, tiempo] >= P_generador[generador, tiempo] + reserva_gen[generador, tiempo])
 # Reserva down
-@constraint(unit_commitment, Reserva_down[tiempo in Time_blocks], sum(generador.Pmin * estado_gen[generador, tiempo] for generador in generadores) <= sum(barra.Demanda[tiempo] for barra in barras) - Reserva_99[tiempo])
+@constraint(unit_commitment, Const_Reserva_dw[generador in generadores[1:54], tiempo in Time_blocks], generador.Pmin * estado_gen[generador, tiempo] <= P_generador[generador, tiempo] - reserva_gen[generador, tiempo])
+# Suma Reserva
+@constraint(unit_commitment, Suma_Reserva[tiempo in Time_blocks], Reserva_99[tiempo] <= sum(reserva_gen[generador, tiempo] for generador in generadores if startswith(generador.Generator, "G")))
 # Restricción de generación de renovables cumpla con pronostico
 @constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
 # Restricción para fijar en cero el ángulo de la primera barra
