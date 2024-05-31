@@ -7,7 +7,7 @@ using DataFrames
 using Plots
 
 
-
+casos_factibles = 0
 #Creación estructura generadores
 mutable struct Generadores
     Generator::String
@@ -30,6 +30,9 @@ mutable struct Generadores
     QFactor::Float64
     RampFactor::Float64
     StartUpCostFactor::Int64
+    estado_gen::Vector{Float64}
+    up_gen::Vector{Float64}
+    off_gen::Vector{Float64}
 end
 
 function Base.show(io::IO, generador::Generadores)
@@ -103,15 +106,10 @@ column_names_renovables = xlsx_data_renovables[1, :]
 dataframe_pronosticos_118 = DataFrame(xlsx_data_renovables[2:end, :], Symbol.(column_names_renovables))
 
 
-#println("Primero: ", dataframe_generadores_118."Pmax [MW]"[2])
-#println(names(dataframe_generadores_118))
-#println("Es de tipo:", typeof(dataframe_generadores_118."PminFactor"[1]))
-## Se crean un arrays para almacenar las instancias
-
 generadores = Generadores[]
 for fila in eachrow(dataframe_generadores_118)
     if fila.Generator != "END"
-        push!(generadores, Generadores(fila.Generator, fila.Bus, fila."Pmax [MW]", fila."Pmin [MW]", fila."Qmax [MVAR]",fila."Qmin [MVAR]", fila."Ramp [MW/h]", fila."SRamp [MW]", fila."MinUP", fila."MinDW", fila."InitS", fila."InitP", fila."StartUpCost [\$]", fila."FixedCost [\$]", fila."VariableCost [\$/MWh]", fila."Type", fila."PminFactor", fila."QFactor", fila."RampFactor", fila."StartUpCostFactor"))
+        push!(generadores, Generadores(fila.Generator, fila.Bus, fila."Pmax [MW]", fila."Pmin [MW]", fila."Qmax [MVAR]",fila."Qmin [MVAR]", fila."Ramp [MW/h]", fila."SRamp [MW]", fila."MinUP", fila."MinDW", fila."InitS", fila."InitP", fila."StartUpCost [\$]", fila."FixedCost [\$]", fila."VariableCost [\$/MWh]", fila."Type", fila."PminFactor", fila."QFactor", fila."RampFactor", fila."StartUpCostFactor", [], [], []))
     end
 end
 
@@ -152,8 +150,56 @@ Potencia_base = 100 #MVA
 
 
 
-# Cálculo kt #
 
+#Se cargan los encendidos y apagados del unit commitment
+
+dataframe_onoff = CSV.read("onoff_90.csv", DataFrame)
+
+for fila in eachrow(dataframe_onoff)
+    for generador in generadores
+        if generador.Generator == fila."generador"
+            lista_aux = []
+            for tiempo in 1:size(Time_Aux)[1]
+                push!(lista_aux, fila[tiempo + 1])
+            end
+            generador.estado_gen = lista_aux
+        end
+    end
+end
+
+#Se cargan up
+
+dataframe_up = CSV.read("up_90.csv", DataFrame)
+
+for fila in eachrow(dataframe_up)
+    for generador in generadores
+        if generador.Generator == fila."generador"
+            lista_aux = []
+            for tiempo in 1:size(Time_blocks)[1]
+                push!(lista_aux, fila[tiempo + 1])
+            end
+            generador.up_gen = lista_aux
+        end
+    end
+end
+
+#Se cargan off
+
+dataframe_off = CSV.read("off_90.csv", DataFrame)
+
+for fila in eachrow(dataframe_off)
+    for generador in generadores
+        if generador.Generator == fila."generador"
+            lista_aux = []
+            for tiempo in 1:size(Time_blocks)[1]
+                push!(lista_aux, fila[tiempo + 1])
+            end
+            generador.off_gen = lista_aux
+        end
+    end
+end
+
+# Cálculo kt #
 interpolate_std(k1, k24, t) = k1 + (k24 - k1) * (t - 1) / 23
 lista_kt_wind = []
 lista_kt_solar = []
@@ -207,21 +253,14 @@ end
 
 
 
-#Creación de reservas
-#Por ser distribución normal Reserva up = Reserva down por simetria
-
-
-Reserva_90 = 1.645*(sum([(pronostico.z_90).^2 for pronostico in pronosticos]/(1.645^2), dims = 1)[1].^(1/2))
-Reserva_99 = 2.575*(sum([(pronostico.z_99).^2 for pronostico in pronosticos]/(2.575^2), dims = 1)[1].^(1/2))
-
-
-
 
     #######################
     ### Creación Modelo ###
     #######################
 
 
+
+function solve_despacho(scenario)
 
 #Crear modelo unit_commitment.
 unit_commitment = Model(Gurobi.Optimizer)
@@ -238,44 +277,28 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 @variable(unit_commitment, flujo[linea in lineas, t in Time_blocks]) 
 #Variables de reserva
 @variable(unit_commitment, reserva_gen[generador in generadores[1:54], t in Time_blocks])
-# Variables binarias
-@variable(unit_commitment, up_gen[g in generadores, t in Time_blocks], Bin)
-@variable(unit_commitment, off_gen[g in generadores, t in Time_blocks], Bin)
-@variable(unit_commitment, estado_gen[g in generadores, t in Time_Aux], Bin)
 
 # La función objetivo es minimizar los costos de generación
-@objective(unit_commitment, Min, sum(generador.VariableCost * P_generador[generador,tiempo] + generador.FixedCost * estado_gen[generador, tiempo] + generador.StartUpCost * up_gen[generador, tiempo] for generador in generadores for tiempo in Time_blocks))
+@objective(unit_commitment, Min, sum(generador.VariableCost * P_generador[generador,tiempo] + generador.FixedCost * generador.estado_gen[tiempo + 10] + generador.StartUpCost * generador.up_gen[tiempo] for generador in generadores for tiempo in Time_blocks))
 
 # Restricción de límite inferior de generación para generadores 
-@constraint(unit_commitment, Lim_gen_min[generador in generadores , tiempo in Time_blocks], P_generador[generador , tiempo] >= generador.Pmin * estado_gen[generador , tiempo])
+@constraint(unit_commitment, Lim_gen_min[generador in generadores , tiempo in Time_blocks], P_generador[generador , tiempo] >= generador.Pmin * generador.estado_gen[tiempo + 10])
 # Restricción de límite superior de generación para generadores 
-@constraint(unit_commitment, Lim_gen_max[generador in generadores, tiempo in Time_blocks], P_generador[generador, tiempo] <= generador.Pmax * estado_gen[generador, tiempo])
-# Restricción de relación variable de encendido y apagado.
-@constraint(unit_commitment, estados[generador in generadores, tiempo in Time_blocks], up_gen[generador, tiempo]-off_gen[generador, tiempo] == estado_gen[generador, tiempo] - estado_gen[generador, tiempo-1])
+@constraint(unit_commitment, Lim_gen_max[generador in generadores, tiempo in Time_blocks], P_generador[generador, tiempo] <= generador.Pmax * generador.estado_gen[tiempo + 10])
 # Restricción de rampas de generación, considerando encendido de generador
-@constraint(unit_commitment, Rampa_encendido[generador in generadores, tiempo in Time_blocks[2:end]], P_generador[generador, tiempo] - P_generador[generador, tiempo-1] <= generador.Ramp * (1- up_gen[generador, tiempo]) + generador.SRamp * up_gen[generador, tiempo])
+@constraint(unit_commitment, Rampa_encendido[generador in generadores, tiempo in Time_blocks[2:end]], P_generador[generador, tiempo] - P_generador[generador, tiempo-1] <= generador.Ramp * (1- generador.up_gen[tiempo]) + generador.SRamp * generador.up_gen[tiempo])
 # Restricción de rampas de generación, considerando apagado de generador
-@constraint(unit_commitment, Rampa_apagado[generador in generadores, tiempo in Time_blocks[2:end]], - generador.SRamp * off_gen[generador, tiempo] -generador.Ramp*(1-off_gen[generador, tiempo]) <= P_generador[generador, tiempo] - P_generador[generador, tiempo-1])
-# Restricción de que los generadores llevan suficiente tiempo apagado para que sean encendidos en t=1.
-@constraint(unit_commitment, est_ini[generador in generadores, tiempo in Time_Aux[1:-1*minimum([generador.InitS for generador in generadores])]], estado_gen[generador, tiempo] == 0)
-# Restricción de mínimo tiempo de encendido
-@constraint(unit_commitment, min_t_on[generador in generadores, tiempo in Time_blocks], sum(estado_gen[generador, t] for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinUP):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinUP * off_gen[generador, tiempo])
-# Restricción de mínimo tiempo de apagado
-@constraint(unit_commitment, min_t_off[generador in generadores, tiempo in Time_blocks], sum((1-estado_gen[generador, t]) for t in Time_Aux[(tiempo-minimum([generador.InitS for generador in generadores])-generador.MinDW):(tiempo-minimum([generador.InitS for generador in generadores])-1)]) >= generador.MinDW * up_gen[generador, tiempo])
+@constraint(unit_commitment, Rampa_apagado[generador in generadores, tiempo in Time_blocks[2:end]], - generador.SRamp * generador.off_gen[tiempo] -generador.Ramp*(1-generador.off_gen[tiempo]) <= P_generador[generador, tiempo] - P_generador[generador, tiempo-1])
 # Definición flujo
 @constraint(unit_commitment, flujo_linea[linea in lineas, tiempo in Time_blocks], flujo[linea, tiempo] == Potencia_base * (angulo_barra[first(a for a in barras if a.IdBar == linea.FromBus), tiempo] - angulo_barra[first(a for a in barras if a.IdBar == linea.ToBus), tiempo])/(linea.Reactance))
 # Límite de flujo por línea
 @constraint(unit_commitment, limite_flujo[linea in lineas, tiempo in Time_blocks], - linea.MaxFlow <= flujo[linea, tiempo] <= linea.MaxFlow)
 # Balance de potencia
 @constraint(unit_commitment, Power_balance[barra in barras, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Bus == barra.IdBar) - sum((flujo[linea, tiempo]) for linea in lineas if linea.FromBus == barra.IdBar) + sum((flujo[linea, tiempo]) for linea in lineas if linea.ToBus == barra.IdBar) == barra.Demanda[tiempo])
-# Reserva up
-@constraint(unit_commitment, Const_Reserva_up[generador in generadores[1:54], tiempo in Time_blocks], generador.Pmax * estado_gen[generador, tiempo] >= P_generador[generador, tiempo] + reserva_gen[generador, tiempo])
-# Reserva down
-@constraint(unit_commitment, Const_Reserva_dw[generador in generadores[1:54], tiempo in Time_blocks], generador.Pmin * estado_gen[generador, tiempo] <= P_generador[generador, tiempo] - reserva_gen[generador, tiempo])
-# Suma Reserva
-@constraint(unit_commitment, Suma_Reserva[tiempo in Time_blocks], Reserva_90[tiempo] <= sum(reserva_gen[generador, tiempo] for generador in generadores if startswith(generador.Generator, "G")))
 # Restricción de generación de renovables cumpla con pronostico
-@constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
+#@constraint(unit_commitment, forecast[pronostico in pronosticos_escenarios, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia && pronostico.Escenario == scenario) <= pronostico.Potencias[tiempo])
+@constraint(unit_commitment, forecast[generador in generadores, tiempo in Time_blocks], P_generador[generador, tiempo] <= sum(pronostico.Potencias[tiempo] for pronostico in pronosticos_escenarios if pronostico.Tecnologia == generador.Generator && scenario == pronostico.Escenario))
+#@constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
 # Restricción para fijar en cero el ángulo de la primera barra
 @constraint(unit_commitment, barra_slack[tiempo in Time_blocks], angulo_barra[barras[1], tiempo] .== 0)
 
@@ -283,6 +306,22 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 optimize!(unit_commitment)
 
 print(termination_status(unit_commitment))
+
+if termination_status(unit_commitment) == MOI.OPTIMAL
+    global casos_factibles = casos_factibles + 1
+end
+
+
+#Hasta acá llega la función solve_despacho
+end
+
+for scenario in 1:n_escenarios
+    println(scenario)
+    solve_despacho(scenario)
+end
+
+
+
 
 variable_cost = 0
 no_load_cost = 0
@@ -293,10 +332,7 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
     for generador in generadores
         for tiempo in Time_blocks
         #println("P_generador del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(P_generador[generador, tiempo]))
-        println("Estado del generador ", generador.Generator," en el tiempo ", tiempo ," es: ", value.(estado_gen[generador, tiempo]))
         global variable_cost = variable_cost + generador.VariableCost * value.(P_generador[generador,tiempo])
-        global no_load_cost = no_load_cost + generador.FixedCost * value.(estado_gen[generador, tiempo])
-        global start_cost = start_cost + generador.StartUpCost * value.(up_gen[generador, tiempo])
         end
     end
     for linea in lineas
@@ -385,36 +421,10 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
 
 
 
-
 else
     println("El modelo no pudo ser resuelto de manera óptima.")
 end
 
 
-
-# Nombres de las columnas
-column_onoff = ["generador", -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
-dataframe_onoff= DataFrame()
-
-# Agregar columnas vacías al DataFrame con los nombres especificados
-for col_name in column_onoff
-    dataframe_onoff[!, Symbol(col_name)] = Vector{Any}()
-end
-
-
-#Se cargan los resultados del unitcomitment
-
-for generador in 1:size(generadores)[1]
-    lista_aux = []
-    push!(lista_aux, generadores[generador].Generator)
-    for tiempo in 1:size(Time_Aux)[1]
-        push!(lista_aux, value.(estado_gen[generadores[generador], Time_Aux[tiempo]]))
-        #dataframe_onoff[generador, 1] = generadores[generador].Generator
-        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
-    end
-    push!(dataframe_onoff, lista_aux)
-end
-
-CSV.write("onoff_90.csv", dataframe_onoff)
 
 

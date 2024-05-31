@@ -152,7 +152,7 @@ Potencia_base = 100 #MVA
 
 
 
-# Generacion de intervalos de confianza #
+# Cálculo kt #
 
 interpolate_std(k1, k24, t) = k1 + (k24 - k1) * (t - 1) / 23
 lista_kt_wind = []
@@ -389,6 +389,29 @@ else
     println("El modelo no pudo ser resuelto de manera óptima.")
 end
 
+# Nombres de las columnas
+column_onoff = ["generador", -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+dataframe_onoff= DataFrame()
 
+# Agregar columnas vacías al DataFrame con los nombres especificados
+for col_name in column_onoff
+    dataframe_onoff[!, Symbol(col_name)] = Vector{Any}()
+end
+
+
+#Se cargan los resultados del unitcomitment
+
+for generador in 1:size(generadores)[1]
+    lista_aux = []
+    push!(lista_aux, generadores[generador].Generator)
+    for tiempo in 1:size(Time_Aux)[1]
+        push!(lista_aux, value.(estado_gen[generadores[generador], Time_Aux[tiempo]]))
+        #dataframe_onoff[generador, 1] = generadores[generador].Generator
+        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
+    end
+    push!(dataframe_onoff, lista_aux)
+end
+
+CSV.write("onoff_99.csv", dataframe_onoff)
 
 

@@ -152,7 +152,7 @@ Potencia_base = 100 #MVA
 
 
 
-# Cálculo kt #
+# Generacion de intervalos de confianza #
 
 interpolate_std(k1, k24, t) = k1 + (k24 - k1) * (t - 1) / 23
 lista_kt_wind = []
@@ -273,7 +273,7 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Reserva down
 @constraint(unit_commitment, Const_Reserva_dw[generador in generadores[1:54], tiempo in Time_blocks], generador.Pmin * estado_gen[generador, tiempo] <= P_generador[generador, tiempo] - reserva_gen[generador, tiempo])
 # Suma Reserva
-@constraint(unit_commitment, Suma_Reserva[tiempo in Time_blocks], Reserva_90[tiempo] <= sum(reserva_gen[generador, tiempo] for generador in generadores if startswith(generador.Generator, "G")))
+@constraint(unit_commitment, Suma_Reserva[tiempo in Time_blocks], Reserva_99[tiempo] <= sum(reserva_gen[generador, tiempo] for generador in generadores if startswith(generador.Generator, "G")))
 # Restricción de generación de renovables cumpla con pronostico
 @constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
 # Restricción para fijar en cero el ángulo de la primera barra
@@ -385,36 +385,10 @@ if termination_status(unit_commitment) == MOI.OPTIMAL
 
 
 
-
 else
     println("El modelo no pudo ser resuelto de manera óptima.")
 end
 
 
-
-# Nombres de las columnas
-column_onoff = ["generador", -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
-dataframe_onoff= DataFrame()
-
-# Agregar columnas vacías al DataFrame con los nombres especificados
-for col_name in column_onoff
-    dataframe_onoff[!, Symbol(col_name)] = Vector{Any}()
-end
-
-
-#Se cargan los resultados del unitcomitment
-
-for generador in 1:size(generadores)[1]
-    lista_aux = []
-    push!(lista_aux, generadores[generador].Generator)
-    for tiempo in 1:size(Time_Aux)[1]
-        push!(lista_aux, value.(estado_gen[generadores[generador], Time_Aux[tiempo]]))
-        #dataframe_onoff[generador, 1] = generadores[generador].Generator
-        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
-    end
-    push!(dataframe_onoff, lista_aux)
-end
-
-CSV.write("onoff_90.csv", dataframe_onoff)
 
 
