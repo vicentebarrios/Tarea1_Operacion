@@ -246,10 +246,12 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # La función objetivo es minimizar los costos de generación
 @objective(unit_commitment, Min, sum(generador.VariableCost * P_generador[generador,tiempo] + generador.FixedCost * estado_gen[generador, tiempo] + generador.StartUpCost * up_gen[generador, tiempo] for generador in generadores for tiempo in Time_blocks))
 
+
+#se relaja restriccion de pmin y pmax inversores renovables
 # Restricción de límite inferior de generación para generadores 
-@constraint(unit_commitment, Lim_gen_min[generador in generadores , tiempo in Time_blocks], P_generador[generador , tiempo] >= generador.Pmin * estado_gen[generador , tiempo])
+@constraint(unit_commitment, Lim_gen_min[generador in generadores[1:54] , tiempo in Time_blocks], P_generador[generador , tiempo] >= generador.Pmin * estado_gen[generador , tiempo])
 # Restricción de límite superior de generación para generadores 
-@constraint(unit_commitment, Lim_gen_max[generador in generadores, tiempo in Time_blocks], P_generador[generador, tiempo] <= generador.Pmax * estado_gen[generador, tiempo])
+@constraint(unit_commitment, Lim_gen_max[generador in generadores[1:54] , tiempo in Time_blocks], P_generador[generador, tiempo] <= generador.Pmax * estado_gen[generador, tiempo])
 # Restricción de relación variable de encendido y apagado.
 @constraint(unit_commitment, estados[generador in generadores, tiempo in Time_blocks], up_gen[generador, tiempo]-off_gen[generador, tiempo] == estado_gen[generador, tiempo] - estado_gen[generador, tiempo-1])
 # Restricción de rampas de generación, considerando encendido de generador
@@ -413,5 +415,67 @@ for generador in 1:size(generadores)[1]
 end
 
 CSV.write("onoff_99.csv", dataframe_onoff)
+
+
+
+
+
+##csv de up
+
+# Nombres de las columnas
+column_up = ["generador", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+dataframe_up= DataFrame()
+
+# Agregar columnas vacías al DataFrame con los nombres especificados
+for col_name in column_up
+    dataframe_up[!, Symbol(col_name)] = Vector{Any}()
+end
+
+
+#Se cargan los resultados del unitcomitment
+
+for generador in 1:size(generadores)[1]
+    lista_aux = []
+    push!(lista_aux, generadores[generador].Generator)
+    for tiempo in 1:size(Time_blocks)[1]
+        push!(lista_aux, value.(up_gen[generadores[generador], Time_blocks[tiempo]]))
+        #dataframe_onoff[generador, 1] = generadores[generador].Generator
+        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
+    end
+    push!(dataframe_up, lista_aux)
+end
+
+CSV.write("up_99.csv", dataframe_up)
+
+
+
+
+##csv de off
+
+# Nombres de las columnas
+column_off = ["generador", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+dataframe_off= DataFrame()
+
+# Agregar columnas vacías al DataFrame con los nombres especificados
+for col_name in column_off
+    dataframe_off[!, Symbol(col_name)] = Vector{Any}()
+end
+
+
+#Se cargan los resultados del unitcomitment
+
+for generador in 1:size(generadores)[1]
+    lista_aux = []
+    push!(lista_aux, generadores[generador].Generator)
+    for tiempo in 1:size(Time_blocks)[1]
+        push!(lista_aux, value.(off_gen[generadores[generador], Time_blocks[tiempo]]))
+        #dataframe_onoff[generador, 1] = generadores[generador].Generator
+        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
+    end
+    push!(dataframe_off, lista_aux)
+end
+
+CSV.write("off_99.csv", dataframe_off)
+
 
 
