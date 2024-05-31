@@ -211,8 +211,8 @@ end
 #Por ser distribución normal Reserva up = Reserva down por simetria
 
 
-Reserva_90 = sum([pronostico.z_90 for pronostico in pronosticos], dims = 1)[1]
-Reserva_99 = sum([pronostico.z_99 for pronostico in pronosticos], dims = 1)[1]
+Reserva_90 = 1.645*(sum([(pronostico.z_90).^2 for pronostico in pronosticos]/(1.645^2), dims = 1)[1].^(1/2))
+Reserva_99 = 2.575*(sum([(pronostico.z_99).^2 for pronostico in pronosticos]/(2.575^2), dims = 1)[1].^(1/2))
 
 
 
