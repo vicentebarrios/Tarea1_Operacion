@@ -418,3 +418,63 @@ end
 CSV.write("onoff_90.csv", dataframe_onoff)
 
 
+##csv de up
+
+# Nombres de las columnas
+column_up = ["generador", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+dataframe_up= DataFrame()
+
+# Agregar columnas vacías al DataFrame con los nombres especificados
+for col_name in column_up
+    dataframe_up[!, Symbol(col_name)] = Vector{Any}()
+end
+
+
+#Se cargan los resultados del unitcomitment
+
+for generador in 1:size(generadores)[1]
+    lista_aux = []
+    push!(lista_aux, generadores[generador].Generator)
+    for tiempo in 1:size(Time_blocks)[1]
+        push!(lista_aux, value.(up_gen[generadores[generador], Time_blocks[tiempo]]))
+        #dataframe_onoff[generador, 1] = generadores[generador].Generator
+        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
+    end
+    push!(dataframe_up, lista_aux)
+end
+
+CSV.write("up_90.csv", dataframe_up)
+
+
+
+
+##csv de off
+
+# Nombres de las columnas
+column_off = ["generador", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+dataframe_off= DataFrame()
+
+# Agregar columnas vacías al DataFrame con los nombres especificados
+for col_name in column_off
+    dataframe_off[!, Symbol(col_name)] = Vector{Any}()
+end
+
+
+#Se cargan los resultados del unitcomitment
+
+for generador in 1:size(generadores)[1]
+    lista_aux = []
+    push!(lista_aux, generadores[generador].Generator)
+    for tiempo in 1:size(Time_blocks)[1]
+        push!(lista_aux, value.(off_gen[generadores[generador], Time_blocks[tiempo]]))
+        #dataframe_onoff[generador, 1] = generadores[generador].Generator
+        #dataframe_onoff[generador, 1 + tiempo] = value.(estado_gen[generadores[generador], Time_Aux[tiempo]])
+    end
+    push!(dataframe_off, lista_aux)
+end
+
+CSV.write("off_90.csv", dataframe_off)
+
+
+
+
