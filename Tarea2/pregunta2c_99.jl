@@ -8,6 +8,8 @@ using Plots
 
 
 casos_factibles = 0
+costo_total_func_obj = 0
+costo_esperado = 0
 #Creación estructura generadores
 mutable struct Generadores
     Generator::String
@@ -309,6 +311,7 @@ print(termination_status(unit_commitment))
 
 if termination_status(unit_commitment) == MOI.OPTIMAL
     global casos_factibles = casos_factibles + 1
+    global costo_total_func_obj  = costo_total_func_obj + objective_value(unit_commitment)
 end
 
 
@@ -316,8 +319,11 @@ end
 end
 
 for scenario in 1:n_escenarios
-    println(scenario)
+    println("                Escenario: ", scenario)
     solve_despacho(scenario)
+    if scenario == n_escenarios
+        global costo_esperado = costo_total_func_obj/casos_factibles
+    end
 end
 
 

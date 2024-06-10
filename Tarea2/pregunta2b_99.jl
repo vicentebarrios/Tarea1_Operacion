@@ -277,7 +277,7 @@ set_optimizer_attribute(unit_commitment, "OutputFlag", 1) # Esto habilita la sal
 # Suma Reserva
 @constraint(unit_commitment, Suma_Reserva[tiempo in Time_blocks], Reserva_99[tiempo] <= sum(reserva_gen[generador, tiempo] for generador in generadores if startswith(generador.Generator, "G")))
 # Restricción de generación de renovables cumpla con pronostico
-@constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= pronostico.Potencias[tiempo])
+@constraint(unit_commitment, forecast[pronostico in pronosticos, tiempo in Time_blocks], sum(P_generador[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia) <= sum(pronostico.Potencias[tiempo] * estado_gen[generador, tiempo] for generador in generadores if generador.Generator == pronostico.Tecnologia))
 # Restricción para fijar en cero el ángulo de la primera barra
 @constraint(unit_commitment, barra_slack[tiempo in Time_blocks], angulo_barra[barras[1], tiempo] .== 0)
 
@@ -479,3 +479,150 @@ CSV.write("off_99.csv", dataframe_off)
 
 
 
+# Plot total
+# Stack Plot capacidad generadores, escenarios y demanda
+
+Pmax_ren = []
+Pmax_ter = []
+Pmin_ren = []
+Pmin_ter = []
+for generador in generadores
+if startswith(generador.Generator, "G") == false
+for tecnologia in pronosticos
+if generador.Generator == tecnologia.Tecnologia
+    global lista_aux_max = []
+    global lista_aux_min = []
+    for tiempo in Time_blocks
+        push!(lista_aux_max, (tecnologia.Potencias[tiempo])*value.(estado_gen[generador, tiempo]) )
+        push!(lista_aux_min, generador.Pmin*value.(estado_gen[generador, tiempo]) )
+    end
+    if tecnologia == pronosticos[1] #generador == generadores[1]
+        push!(Pmax_ren, lista_aux_max)
+        push!(Pmin_ren, lista_aux_min)
+        global Pmax_ren = Pmax_ren[]
+        global Pmin_ren = Pmin_ren[]
+    else
+        global Pmax_ren = Pmax_ren + lista_aux_max
+        global Pmin_ren = Pmin_ren + lista_aux_min
+    end
+end
+end
+elseif startswith(generador.Generator, "G") == true
+    global lista_aux_max = []
+    global lista_aux_min = []
+    for tiempo in Time_blocks
+        push!(lista_aux_max, generador.Pmax*value.(estado_gen[generador, tiempo]))
+        push!(lista_aux_min, generador.Pmin*value.(estado_gen[generador, tiempo]))
+    end
+    if generador == generadores[1]
+        push!(Pmax_ter, lista_aux_max)
+        push!(Pmin_ter, lista_aux_min)
+        global Pmax_ter = Pmax_ter[]
+        global Pmin_ter = Pmin_ter[]
+    else
+        global Pmax_ter = Pmax_ter + lista_aux_max
+        global Pmin_ter = Pmin_ter + lista_aux_min
+    end
+end
+end
+
+demanda_plot = []
+for barra in barras
+    if barra == barras[1]
+        push!(demanda_plot, barra.Demanda)
+        global demanda_plot = demanda_plot[]
+    else
+        global demanda_plot = demanda_plot + barra.Demanda
+    end    
+end
+
+plot()
+
+plot!(Pmax_ren .+ Pmax_ter, label="Pmax_ren", linewidth=2, color=RGB(0.0, 1.0, 0.0), fillrange=Pmax_ter)
+plot!(Pmax_ter, label="Pmax_ter", linewidth=2, color=RGB(1.0, 0.0, 0.0), fillrange=Pmin_ter)
+plot!(Pmin_ter .+ Pmin_ren, label="Pmin", linewidth=2, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(demanda_plot, label="Demanda", linewidth=2, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
+for i in 1:n_escenarios
+    plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if tecnologia.Escenario == i], dims=1)[] .+ Pmax_ter, label=nothing, linewidth=0.5)
+end
+
+xlabel!("Horas")
+ylabel!("Potencia")
+title!("Stack Plot con reserva_99")
+savefig("Stack plot 99 sin const_inversor.png")
+
+
+
+
+
+
+
+
+Pmax_ren = []
+Pmax_ter = []
+Pmin_ren = []
+Pmin_ter = []
+for generador in generadores
+if startswith(generador.Generator, "G") == false
+for tecnologia in pronosticos
+if generador.Generator == tecnologia.Tecnologia
+    global lista_aux_max = []
+    global lista_aux_min = []
+    for tiempo in Time_blocks
+        push!(lista_aux_max, minimum([generador.Pmax*value.(estado_gen[generador, tiempo]),(tecnologia.Potencias[tiempo])*value.(estado_gen[generador, tiempo])]))
+        push!(lista_aux_min, generador.Pmin*value.(estado_gen[generador, tiempo]) )
+    end
+    if tecnologia == pronosticos[1] #generador == generadores[1]
+        push!(Pmax_ren, lista_aux_max)
+        push!(Pmin_ren, lista_aux_min)
+        global Pmax_ren = Pmax_ren[]
+        global Pmin_ren = Pmin_ren[]
+    else
+        global Pmax_ren = Pmax_ren + lista_aux_max
+        global Pmin_ren = Pmin_ren + lista_aux_min
+    end
+end
+end
+elseif startswith(generador.Generator, "G") == true
+    global lista_aux_max = []
+    global lista_aux_min = []
+    for tiempo in Time_blocks
+        push!(lista_aux_max, generador.Pmax*value.(estado_gen[generador, tiempo]))
+        push!(lista_aux_min, generador.Pmin*value.(estado_gen[generador, tiempo]))
+    end
+    if generador == generadores[1]
+        push!(Pmax_ter, lista_aux_max)
+        push!(Pmin_ter, lista_aux_min)
+        global Pmax_ter = Pmax_ter[]
+        global Pmin_ter = Pmin_ter[]
+    else
+        global Pmax_ter = Pmax_ter + lista_aux_max
+        global Pmin_ter = Pmin_ter + lista_aux_min
+    end
+end
+end
+
+demanda_plot = []
+for barra in barras
+    if barra == barras[1]
+        push!(demanda_plot, barra.Demanda)
+        global demanda_plot = demanda_plot[]
+    else
+        global demanda_plot = demanda_plot + barra.Demanda
+    end    
+end
+
+plot()
+
+plot!(Pmax_ren .+ Pmax_ter, label="Pmax_ren", linewidth=2, color=RGB(0.0, 1.0, 0.0), fillrange=Pmax_ter)
+plot!(Pmax_ter, label="Pmax_ter", linewidth=2, color=RGB(1.0, 0.0, 0.0), fillrange=Pmin_ter)
+plot!(Pmin_ter .+ Pmin_ren, label="Pmin", linewidth=2, linecolor=RGB(0.0, 0.0, 1.0), linestyle=:dash)
+plot!(demanda_plot, label="Demanda", linewidth=2, linecolor=RGB(1.0, 1.0, 0.0), linestyle=:dash)
+for i in 1:n_escenarios
+    plot!(sum([tecnologia.Potencias for tecnologia in pronosticos_escenarios if tecnologia.Escenario == i], dims=1)[] .+ Pmax_ter, label=nothing, linewidth=0.5)
+end
+
+xlabel!("Horas")
+ylabel!("Potencia")
+title!("Stack Plot con reserva_99")
+savefig("Stack plot 99 con const_inversor.png")
