@@ -1,6 +1,6 @@
 using JuMP
 using Gurobi
-using Plots
+
 
 # Parámetros del problema
 demanda = [150, 150, 150]  # MW
