@@ -22,78 +22,96 @@ probabilidades = [
     [0.5, 0.5]
 ]
 
-# Función para crear el modelo maestro
-
-function crear_modelo_maestro()
-    problema_maestro = Model(Gurobi.Optimizer)
-    #Creación de variables
-    @variable(problema_maestro, generacion_termica[1:generadores[end], 1:periodos[end]] >= 0)
-    @variable(problema_maestro, generacion_hidro[1:generadores[end], 1:periodos[end]] >= 0)
-    @objective(problema_maestro, Min, sum(costo_termico[j] * generacion_termica[j,i] for i in periodos for j in generadores))
-    @constraint(problema_maestro, Lim_gen_termo[g in generadores, i in periodos], generacion_termica[g, i] <= capacidad_termica[i]) # Generación térmica
-    @constraint(problema_maestro, Lim_gen_hidro[i in periodos], generacion_hidro[i] <= capacidad_hidraulica) # Generación térmica
-    @constraint(problema_maestro, balance_potencia[semana in periodos], sum(generacion_termica[generador, semana] for generador in generadores) + generacion_hidro[semana] >= demanda[semana] )  # Satisfacer la demanda
-    return modelo
-end
 
 # Función para resolver el subproblema de Benders
-function resolver_subproblema(almacenamiento, afluente)
+function crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
     subproblema = Model(Gurobi.Optimizer)
-    @variable(subproblema, 0 <= gen_hidro_sub[semana in periodos] <= capacidad_hidraulica)  # Generación hidráulica en el subproblema
-    @constraint(subproblema, Lim_gen_hidro[semana in periodos],  gen_hidro_sub[semana] <= almacenamiento + afluente)  # Restricción de almacenamiento
-    @objective(subproblema, Min, 0)  # El costo variable del generador hidráulico es 0
+    @variable(subproblema, 0 <= generacion_hidro <= capacidad_hidraulica)
+    @variable(subproblema, 0 <= generacion_termica[generador in generadores])
+    @variable(subproblema, 0 <= almacenamiento_final)
+    @variable(subproblema, theta)
+
+    @constraint(subproblema, Lim_gen_termo[generador in generadores], generacion_termica[generador] <= capacidad_termica[generador])
+    @constraint(subproblema, balance_potencia, sum(generacion_termica[generador] for generador in generadores) + generacion_hidro >= demanda[semana])  # Satisfacer la demanda
+    @constraint(subproblema, Lim_gen_hidro_dw,  almacenamiento_final <= almacenamiento_max)
+    @constraint(subproblema, Definicion_almacenamiento, almacenamiento_final == almacenamiento_inicial + afluente - generacion_hidro)
+
+    @constraint(subproblema, corte,  M * (almacenamiento_final - almacenamiento_final_anterior) + N <= theta)
+
+    @objective(subproblema, Min, sum(costo_termico[generador] * generacion_termica[generador] for generador in generadores) + theta)
+
     optimize!(subproblema)
-    return value(gen_hidro_sub), dual(subproblema[:gen_hidro_sub <= almacenamiento + afluente])
+
+    println("El valor objetivo es ", objective_value(subproblema))
+    println("El dual es ", dual(Definicion_almacenamiento))
+    println("La generación hidro es ", value(generacion_hidro))
+    println("La generación P1 es ", value(generacion_termica[1]))
+    println("La generación P2 es ", value(generacion_termica[2]))
+    println("La generación P3 es ", value(generacion_termica[3]))
+    println("Y el almacenamiento final es ", (almacenamiento_inicial + afluente - value(generacion_hidro)))
+    return objective_value(subproblema), dual(Definicion_almacenamiento), value(generacion_hidro), (almacenamiento_inicial + afluente - value(generacion_hidro))
 end
 
-#function hola(a,b)
-#    var = [1,2,3]
-#    c=a+b
-#    return var
-#end
-#b=hola(1,1);
 
-# Algoritmo de Benders Anidado
-function algoritmo_benders()
-    modelo_maestro = crear_modelo_maestro()
-    cortes_optimalidad = []
-    cortes_factibilidad = []
-    
-    for _ in 1:3  # Realizamos 3 barridos (Forward, Backwards, Forward)
-        # Barrido Forward
-        for semana in periodos
-            for escenario in 1:length(afluentes[semana])
-                afluente = afluentes[semana][escenario]
-                almacenamiento = almacenamiento_inicial  # Se podría actualizar según el escenario previo
-                gen_hidro_sub, lambda = resolver_subproblema(almacenamiento, afluente)
-                push!(cortes_optimalidad, lambda * (gen_hidro_sub - almacenamiento - afluente))
-            end
-        end
-        
-        # Barrido Backwards (un ejemplo de uso del último elemento)
-        for semana in 1:3
-            ultimo_afluente = afluentes[semana][end]
-            println("El último afluente para la semana $semana es: $ultimo_afluente")
-            # Actualizaciones necesarias con ultimo_afluente
-        end
 
-        # Actualizamos el modelo maestro con los cortes
-        for corte in cortes_optimalidad
-            @constraint(modelo_maestro, corte <= 0)
-        end
-        optimize!(modelo_maestro)
-    end
-    
-    return modelo_maestro
-end
+##BACKWARD
 
-# Ejecutamos el algoritmo de Benders
-modelo_final = algoritmo_benders()
+#Etapa 3.1
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,25,3,0,0,0)
 
-# Visualizamos los resultados
-for g in 1:3, t in 1:3
-    println("Generación térmica del generador $g en el periodo $t: ", value(modelo_final[:generacion_termica[g, t]]))
-end
-for t in 1:3
-    println("Generación hidráulica en el periodo $t: ", value(modelo_final[:generacion_hidraulica[t]]))
-end
+#Etapa 3.2
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,75,3,0,0,0)
+
+#Etapa 3.3
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,25,3,0,0,0)
+
+#Etapa 3.4
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,75,3,0,0,0)
+
+
+#Etapa 2.1
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,25,2,-125,8125,0)
+
+#Etapa 2.2
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(0,75,2,-125,8125,0)
+
+
+#Etapa 1
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(100,50,1,-137.5,15937.5,0)
+
+
+
+###FORWARD
+#Etapa 2.1
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(100,25,2,-125,8125,0)
+
+#Etapa 2.2
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(100,75,2,-125,8125,0)
+
+
+#Etapa 3.1
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(75,25,3,0,0,0)
+
+#Etapa 3.2
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(75,75,3,0,0,0)
+
+#Etapa 3.3
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(125,25,3,0,0,0)
+
+#Etapa 3.4
+#crear_subproblema(almacenamiento_inicial, afluente, semana, M, N, almacenamiento_final_anterior)
+crear_subproblema(125,75,3,0,0,0)
+
+
