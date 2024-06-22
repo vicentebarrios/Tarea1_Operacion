@@ -49,7 +49,7 @@ model = SDDP.PolicyGraph(
 )
 
 
-num_iteraciones = 100
+num_iteraciones = 5
 SDDP.train(model; iteration_limit = num_iteraciones)
 
 simulations = SDDP.simulate(
@@ -76,7 +76,7 @@ for i in 1:100
     push!(outgoing_volume, lista_aux)
 end
 
-outgoing_volume[1]
+#outgoing_volume[1]
 
 # Crear un gráfico vacío con etiquetas para los ejes
 plot(title="Volumen a lo largo del tiempo " * string(num_iteraciones) * " iteraciones", xlabel="Tiempo", ylabel="Volumen")
@@ -87,9 +87,6 @@ for i in 1:100
 end
 savefig(string(num_iteraciones) * "- iteraciones.png")
 display(plot)
-
-
-# Agregar otras iteraciones
 
 
 #2.2
@@ -117,7 +114,7 @@ std(lista_aux)
 
 
 μ, ci = SDDP.confidence_interval(objectives)
-std = std(objectives)
+
 println("Confidence interval: ", μ, " ± ", ci)
 
 println("Upper bound: ", μ+ci)
@@ -130,174 +127,3 @@ cost, price = SDDP.evaluate(V, Dict("volume" => 100)) # Volumen inicial
 # Función de costo futuros igual a 502375.0 
 # Costo marginal del agua almacenada = -50, si aumento en uno el almacenamiento disminuye en 50 el costo futuro del agua. 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Función para ejecutar un barrido forward
-function run_forward_pass(model::SDDP.PolicyGraph)
-    SDDP.initialize!(model)  # Inicializar el modelo SDDP
-    
-    # Ejecutar un barrido forward
-    while !SDDP.is_finished(model)
-        SDDP.next_stage!(model)
-        SDDP.optimize_current_stage!(model)
-    end
-    
-    # Mostrar soluciones candidatas
-    println("Soluciones candidatas después del barrido forward:")
-    SDDP.evaluate(model, [:volume, :gen_termico_1, :gen_termico_2, :gen_termico_3, :hydro_generation, :hydro_spill])
-    
-    # Mostrar cortes de optimalidad y factibilidad
-    println("Cortes de optimalidad después del barrido forward:")
-    println(SDDP.get_optimality_cuts(model))
-    println("Cortes de factibilidad después del barrido forward:")
-    println(SDDP.get_feasibility_cuts(model))
-end
-
-# Función para ejecutar un barrido backward
-function run_backward_pass(model::SDDP.PolicyGraph)
-    while !SDDP.is_empty_backlog(model)
-        SDDP.previous_stage!(model)
-        SDDP.restore_solution!(model)
-        SDDP.generate_cuts!(model)
-    end
-    
-    # Mostrar soluciones candidatas después del barrido backward
-    println("Soluciones candidatas después del barrido backward:")
-    SDDP.evaluate(model, [:volume, :gen_termico_1, :gen_termico_2, :gen_termico_3, :hydro_generation, :hydro_spill])
-    
-    # Mostrar cortes de optimalidad y factibilidad después del backward
-    println("Cortes de optimalidad después del barrido backward:")
-    println(SDDP.get_optimality_cuts(model))
-    println("Cortes de factibilidad después del barrido backward:")
-    println(SDDP.get_feasibility_cuts(model))
-end
-
-# Ejecutar un barrido forward completo
-run_forward_pass(model)
-
-# Ejecutar un barrido backward completo
-run_backward_pass(model)
-
-# Ejecutar un último barrido forward completo
-run_forward_pass(model)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Función para realizar los barridos manualmente
-function perform_sweep(model)
-    # Primer forward pass (1 iteración)
-    println("Forward Pass 1")
-    SDDP.train(model, iteration_limit = 1, log_frequency = 1)
-
-    println("Candidate solutions after Forward Pass 1:")
-    for (t, subproblem) in enumerate(model[:subproblems])
-        println("Node $t:")
-        print_candidate_solution(subproblem)
-    end
-
-    # Backward pass (otra iteración, total 2 iteraciones)
-    println("\nBackward Pass")
-    SDDP.train(model, iteration_limit = 2, log_frequency = 1)
-
-    println("Cuts after Backward Pass:")
-    for (t, subproblem) in enumerate(model[:subproblems])
-        println("Node $t:")
-        print_cuts(subproblem)
-    end
-
-    # Segundo forward pass (otra iteración, total 3 iteraciones)
-    println("\nForward Pass 2")
-    SDDP.train(model, iteration_limit = 3, log_frequency = 1)
-
-    println("Candidate solutions after Forward Pass 2:")
-    for (t, subproblem) in enumerate(model[:subproblems])
-        println("Node $t:")
-        print_candidate_solution(subproblem)
-    end
-end
-
-# Función para imprimir las soluciones candidatas
-function print_candidate_solution(subproblem)
-    println("Candidate solution:")
-    for v in all_variables(subproblem)
-        println("$(variable_name(v)): $(JuMP.value(v))")
-    end
-end
-
-# Función para imprimir los cortes de optimalidad
-function print_cuts(subproblem)
-    println("Cuts:")
-    for cut in subproblem(node)
-        println(cut)
-    end
-end
-
-perform_sweep(model)
-SDDP.train(model; iteration_limit = 10)
-
-simulations = SDDP.simulate(
-    # The trained model to simulate.
-    model,
-    # The number of replications.
-    100,
-    # A list of names to record the values of.
-    [:volume, :gen_termico_1, :gen_termico_2, :gen_termico_3, :hydro_generation, :hydro_spill],
-)
-
-replication = 1
-stage = 2
-simulations[replication][stage]
-
-outgoing_volume = map(simulations[1]) do node
-    return "El volumen del estanque es: ", node[:volume].out
-end
-
-generacion_hidro = map(simulations[1]) do node
-    return "Generador hidro es: ", node[:hydro_generation]
-end
-
-gen_termico_1 = map(simulations[1]) do node
-    return "Generador térmico 1 produce: ", node[:gen_termico_1]
-end
-
-gen_termico_2 = map(simulations[1]) do node
-    return "Generador térmico 2 produce: ", node[:gen_termico_2]
-end
-
-gen_termico_3 = map(simulations[1]) do node
-    return "Generador térmico 3 produce: ", node[:gen_termico_3]
-end
