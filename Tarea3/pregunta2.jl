@@ -185,7 +185,6 @@ for i in 1:100
     plot!(1:100, outgoing_volume[i][:], label=false)  # Agregar cada columna al gráfico
 end
 plot!(1:100, promedios_etapa, label="Promedio", linecolor=:red, linewidth=2)
-plot!(1:100, percentil_95, label="Percentil 95%", linecolor=:blue, linewidth=2)
 plot!(1:100, ic_95, label="IC 95%", linecolor=:black, linewidth=2)
 savefig(string(num_iteraciones) * "- iteraciones-IC.png")
 display(plot)
